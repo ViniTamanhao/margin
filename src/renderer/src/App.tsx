@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
-import type { DocumentSnapshot, Workspace } from '../../shared/api'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import type { Workspace } from '../../shared/api'
+import { EditorController } from './editor/controller'
+import { EditorSurface } from './editor/EditorSurface'
 
 function App(): React.JSX.Element {
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
-  const [document, setDocument] = useState<DocumentSnapshot | null>(null)
+  const [controller] = useState(() => new EditorController(window.margin.document))
+  const editor = useSyncExternalStore(controller.subscribe, controller.snapshot)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -31,20 +34,12 @@ function App(): React.JSX.Element {
       const next = await window.margin.workspace.open()
       if (next) {
         setWorkspace(next)
-        setDocument(null)
+        controller.reset()
       }
     } catch {
       setError('Could not open this folder. Check that it is accessible.')
     } finally {
       setBusy(false)
-    }
-  }
-  const openFile = async (path: string): Promise<void> => {
-    try {
-      setDocument(await window.margin.document.read(path))
-      setError('')
-    } catch {
-      setError('Could not read this file. It may have moved or been deleted.')
     }
   }
   return (
@@ -75,21 +70,41 @@ function App(): React.JSX.Element {
             {workspace.files.map((path) => (
               <button
                 key={path}
-                className={document?.path === path ? 'active' : ''}
-                onClick={() => void openFile(path)}
+                className={editor.path === path ? 'active' : ''}
+                onClick={() => void controller.open(path)}
               >
                 {path}
               </button>
             ))}
           </nav>
         )}
-        {document ? (
-          <pre className="document-preview">{document.content}</pre>
-        ) : (
-          <div className="empty-state">
-            <p>{workspace ? 'Choose a Markdown file.' : 'Open a folder. Start writing.'}</p>
+        <section className="writing-pane" aria-label="Writing surface">
+          {editor.error && (
+            <p className="notice" role="alert">
+              {editor.error}
+            </p>
+          )}
+          {editor.path && (
+            <div className="document-heading">
+              <span>{editor.path}</span>
+              <span aria-live="polite">
+                {editor.status === 'dirty'
+                  ? 'Unsaved'
+                  : editor.status === 'loading'
+                    ? 'Opening…'
+                    : ''}
+              </span>
+            </div>
+          )}
+          <div className={editor.path ? 'editor-host' : 'editor-host hidden'}>
+            <EditorSurface controller={controller} />
           </div>
-        )}
+          {!editor.path && (
+            <div className="empty-state">
+              <p>{workspace ? 'Choose a Markdown file.' : 'Open a folder. Start writing.'}</p>
+            </div>
+          )}
+        </section>
       </div>
     </main>
   )
