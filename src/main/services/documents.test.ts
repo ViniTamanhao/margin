@@ -22,7 +22,7 @@ async function fixture(): Promise<{ root: string; documents: DocumentService }> 
 }
 test('saves exact UTF-8 contents, preserves permissions and retains recovery versions', async () => {
   const { root, documents } = await fixture()
-  await chmod(join(root, 'a.md'), 0o640)
+  await chmod(join(root, 'a.md'), 0o660)
   const original = await documents.read('a.md')
   const result = await documents.save({
     path: 'a.md',
@@ -31,7 +31,7 @@ test('saves exact UTF-8 contents, preserves permissions and retains recovery ver
   })
   expect(result.kind).toBe('saved')
   expect(await readFile(join(root, 'a.md'), 'utf8')).toBe('# Café\r\n')
-  expect((await stat(join(root, 'a.md'))).mode & 0o777).toBe(0o640)
+  expect((await stat(join(root, 'a.md'))).mode & 0o777).toBe(0o660)
   const versions = await readdir(join(root, 'recovery', (await readdir(join(root, 'recovery')))[0]))
   expect(versions.filter((name) => name.endsWith('.md'))).toHaveLength(2)
   expect((await readdir(root)).some((name) => name.endsWith('.tmp'))).toBe(false)

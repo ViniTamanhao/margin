@@ -60,10 +60,15 @@ export class DocumentService {
 
   private async preserve(target: string, content: string): Promise<void> {
     const directory = join(this.recoveryDirectory, revisionOf(target))
-    await mkdir(directory, { recursive: true })
-    await writeFile(join(directory, 'source.json'), JSON.stringify({ path: target }))
+    await mkdir(directory, { recursive: true, mode: 0o700 })
+    await writeFile(join(directory, 'source.json'), JSON.stringify({ path: target }), {
+      mode: 0o600
+    })
     try {
-      await writeFile(join(directory, `${revisionOf(content)}.md`), content, { flag: 'wx' })
+      await writeFile(join(directory, `${revisionOf(content)}.md`), content, {
+        flag: 'wx',
+        mode: 0o600
+      })
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
     }
@@ -78,13 +83,14 @@ export class DocumentService {
       const metadata = await stat(target)
       if (metadata.nlink > 1) throw new Error('Hard-linked documents cannot be safely replaced.')
       // Normal filesystems have no compare-and-swap rename. Preserve both versions before
-      // replacement so a crash or a writer racing the final check cannot destroy either copy.
+      // replacement so both the observed disk version and proposed edits remain recoverable.
       await this.preserve(target, current.content)
       await this.preserve(target, request.content)
       temporary = join(dirname(target), `.margin-${randomUUID()}.tmp`)
       const handle = await open(temporary, 'wx', metadata.mode)
       try {
         await handle.writeFile(request.content, 'utf8')
+        await handle.chmod(metadata.mode)
         await handle.sync()
       } finally {
         await handle.close()
