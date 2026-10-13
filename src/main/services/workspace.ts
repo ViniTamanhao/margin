@@ -1,12 +1,29 @@
 import { readdir, realpath, stat, lstat } from 'node:fs/promises'
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path'
-import type { Workspace } from '../../shared/api'
+import { watch, type FSWatcher } from 'chokidar'
+import type { Workspace, WorkspaceChange } from '../../shared/api'
 
 export const ignoredDirectories = new Set(['.git', 'node_modules', '.hg', '.svn'])
 export const isMarkdown = (path: string): boolean => path.toLowerCase().endsWith('.md')
 
 export class WorkspaceService {
   private workspace: Workspace | null = null
+
+  private watcher: FSWatcher | null = null
+  private timer: ReturnType<typeof setTimeout> | undefined
+  private changed = new Set<string>()
+  private listener: (change: WorkspaceChange) => void = () => {}
+
+  onChanged(listener: (change: WorkspaceChange) => void): void {
+    this.listener = listener
+  }
+
+  async close(): Promise<void> {
+    clearTimeout(this.timer)
+    this.changed.clear()
+    await this.watcher?.close()
+    this.watcher = null
+  }
 
   current(): Workspace | null {
     return this.workspace
@@ -35,8 +52,76 @@ export class WorkspaceService {
       }
     }
     await scan(root)
+    await this.close()
     this.workspace = { root, name: basename(root), files: files.sort(), warnings }
+    this.startWatching(root)
     return this.workspace
+  }
+
+  private startWatching(root: string): void {
+    const watcher = watch(root, {
+      ignoreInitial: false,
+      followSymlinks: false,
+      ignored: (path, stats) => {
+        const parts = relative(root, path).split(sep)
+        return (
+          parts.some((part) => ignoredDirectories.has(part)) ||
+          Boolean(stats?.isSymbolicLink()) ||
+          Boolean(stats?.isFile() && !isMarkdown(path))
+        )
+      },
+      atomic: 100,
+      awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 }
+    })
+    const discovered = new Set<string>()
+    this.watcher = watcher
+    const publish = (): void => {
+      if (this.watcher !== watcher || !this.workspace) return
+      this.listener({
+        workspace: {
+          ...this.workspace,
+          files: [...this.workspace.files],
+          warnings: [...this.workspace.warnings]
+        },
+        changedPaths: [...this.changed]
+      })
+      this.changed.clear()
+    }
+    watcher.on('all', (event, path) => {
+      if (this.watcher !== watcher || !this.workspace) return
+      const local = relative(root, path).split(sep).join('/')
+      if (!local && event === 'unlinkDir') {
+        this.workspace.warnings = ['The workspace folder was removed. Open another folder.']
+        this.changed = new Set(this.workspace.files)
+        this.workspace.files = []
+      } else if (isMarkdown(local)) {
+        const files = new Set(this.workspace.files)
+        if (event === 'unlink') {
+          files.delete(local)
+          discovered.delete(local)
+        } else if (event === 'add') {
+          files.add(local)
+          discovered.add(local)
+        } else if (event !== 'change') return
+        this.workspace.files = [...files].sort()
+        this.changed.add(local)
+      } else return
+      clearTimeout(this.timer)
+      this.timer = setTimeout(publish, 100)
+    })
+    watcher.on('error', (error) => {
+      console.error('Workspace watcher failed.', error)
+      if (this.watcher !== watcher || !this.workspace) return
+      this.workspace.warnings = ['File watching failed. Reopen the folder to retry.']
+      publish()
+    })
+    // Reconcile the initial async scan with the watcher's own discovery, closing the startup gap.
+    watcher.once('ready', () => {
+      if (this.watcher !== watcher || !this.workspace) return
+      this.changed = new Set([...this.workspace.files, ...discovered])
+      this.workspace.files = [...discovered].sort()
+      publish()
+    })
   }
 
   async resolveDocument(path: string): Promise<string> {

@@ -51,7 +51,10 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  registerIPC(app.getVersion())
+  const workspaces = registerIPC(app.getVersion(), join(app.getPath('userData'), 'state.json'))
+  app.on('before-quit', () => {
+    void workspaces.close()
+  })
 
   createWindow()
 

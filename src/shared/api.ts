@@ -2,7 +2,8 @@ export const channels = {
   appInfo: 'app:info',
   workspaceOpen: 'workspace:open',
   workspaceCurrent: 'workspace:current',
-  documentRead: 'document:read'
+  documentRead: 'document:read',
+  workspaceChanged: 'workspace:changed'
 } as const
 
 export interface AppInfo {
@@ -15,6 +16,10 @@ export interface Workspace {
   files: string[]
   warnings: string[]
 }
+export interface WorkspaceChange {
+  workspace: Workspace
+  changedPaths: string[]
+}
 export interface DocumentSnapshot {
   path: string
   content: string
@@ -25,6 +30,7 @@ export interface MarginAPI {
   workspace: {
     open(): Promise<Workspace | null>
     current(): Promise<Workspace | null>
+    onChanged(callback: (change: WorkspaceChange) => void): () => void
   }
   document: { read(path: string): Promise<DocumentSnapshot> }
 }

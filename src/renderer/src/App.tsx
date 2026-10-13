@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { DocumentSnapshot, Workspace } from '../../shared/api'
 
 function App(): React.JSX.Element {
@@ -6,6 +6,24 @@ function App(): React.JSX.Element {
   const [document, setDocument] = useState<DocumentSnapshot | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  useEffect(() => {
+    let alive = true
+    const unsubscribe = window.margin.workspace.onChanged((change) => {
+      if (alive) setWorkspace(change.workspace)
+    })
+    void window.margin.workspace
+      .current()
+      .then((workspace) => {
+        if (alive) setWorkspace(workspace)
+      })
+      .catch(() => {
+        if (alive) setError('Could not restore the workspace. Open a folder to continue.')
+      })
+    return () => {
+      alive = false
+      unsubscribe()
+    }
+  }, [])
   const openFolder = async (): Promise<void> => {
     setBusy(true)
     setError('')
