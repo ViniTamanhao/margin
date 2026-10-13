@@ -1,7 +1,7 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { channels } from '../shared/api'
+import { registerIPC } from './ipc'
 import icon from '../../resources/icon.png?asset'
 
 function createWindow(): void {
@@ -24,10 +24,7 @@ function createWindow(): void {
     mainWindow.show()
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    void details
-    return { action: 'deny' }
-  })
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault())
 
@@ -54,7 +51,7 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  ipcMain.handle(channels.appInfo, () => ({ name: 'Margin', version: app.getVersion() }))
+  registerIPC(app.getVersion())
 
   createWindow()
 

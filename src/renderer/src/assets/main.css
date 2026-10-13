@@ -23,3 +23,54 @@ h1 {
   place-content: center;
   color: var(--margin-text-muted);
 }
+.workspace-name {
+  color: var(--margin-text-muted);
+  font-size: 13px;
+  flex: 1;
+}
+.app-header button {
+  background: transparent;
+  border: 1px solid var(--margin-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 12px;
+}
+.workspace-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.file-list {
+  width: 210px;
+  flex-shrink: 0;
+  overflow: auto;
+  padding: var(--space-md) var(--space-sm);
+  border-right: 1px solid var(--margin-border);
+  font-size: 12px;
+}
+.file-list button {
+  display: block;
+  text-align: left;
+  width: 100%;
+  overflow-wrap: anywhere;
+  padding: var(--space-sm);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+}
+.file-list button.active {
+  background: var(--margin-selection);
+}
+.notice {
+  margin: 0;
+  padding: var(--space-sm) var(--space-lg);
+  color: var(--margin-error);
+  font-size: 13px;
+}
+.document-preview {
+  flex: 1;
+  padding: var(--space-xl);
+  overflow: auto;
+  white-space: pre-wrap;
+  font: var(--editor-font-size)/var(--editor-line-height) var(--editor-font-family);
+}
