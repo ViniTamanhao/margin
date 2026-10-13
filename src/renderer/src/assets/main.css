@@ -98,18 +98,18 @@ h1 {
 .cm-editor.cm-focused {
   outline: none;
 }
-.cm-scroller {
+.editor-surface .cm-editor .cm-scroller {
   font: var(--editor-font-size)/var(--editor-line-height) var(--editor-font-family);
   overflow: auto;
 }
-.cm-content {
+.editor-surface .cm-content {
   max-width: var(--editor-content-width);
   width: 100%;
   margin: 0 auto;
   padding: var(--space-lg) var(--space-xl) calc(var(--space-xl) * 3);
   caret-color: var(--margin-accent);
 }
-.cm-line {
+.editor-surface .cm-line {
   padding: 0;
 }
 .cm-editor .cm-selectionBackground,

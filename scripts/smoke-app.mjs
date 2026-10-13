@@ -75,6 +75,17 @@ async function run() {
         async () => (await evaluate('document.querySelectorAll(".file-list button").length')) === 2,
         'recursive Markdown discovery'
       )
+      await evaluate("document.querySelector('.file-list button').focus()")
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Down' })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Down' })
+      await until(
+        async () => await evaluate("document.activeElement.textContent === 'nested/b.md'"),
+        'file-list arrow navigation'
+      )
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' })
+      window.webContents.sendInputEvent({ type: 'char', keyCode: '\r' })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
+      await until(async () => (await heading()).includes('nested/b.md'), 'file opens from keyboard')
       await click('a.md')
       await until(async () => (await text()).includes('# Original'), 'document opens')
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'End', modifiers: ['control'] })
@@ -103,6 +114,11 @@ async function run() {
         modifiers: ['control', 'shift']
       })
       await until(async () => (await text()).includes('Autosaved'), 'redo')
+      const typography = await evaluate(
+        "({ font: getComputedStyle(document.querySelector('.cm-scroller')).fontFamily, padding: getComputedStyle(document.querySelector('.cm-content')).paddingLeft })"
+      )
+      assert.ok(typography.font.includes('Georgia'), 'editor consumes typography tokens')
+      assert.equal(typography.padding, '48px', 'editor consumes spacing tokens')
       const selection = await evaluate('window.getSelection().anchorOffset')
       await click('nested/b.md')
       await until(async () => (await heading()).includes('nested/b.md'), 'second file opens')
@@ -163,6 +179,9 @@ async function run() {
         'file opens after recovery'
       )
       await window.webContents.insertText(' flush before close')
+      await evaluate(
+        'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))'
+      )
       await writeFile(join(root, 'screenshot.png'), (await window.capturePage()).toPNG())
       window.close()
       await until(() => window.isDestroyed(), 'close flush completed')
