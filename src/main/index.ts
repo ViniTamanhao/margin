@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { guardWindowClose } from './window-lifecycle'
 import { registerIPC } from './ipc'
 import icon from '../../resources/icon.png?asset'
 
@@ -19,6 +20,8 @@ function createWindow(): void {
       nodeIntegration: false
     }
   })
+
+  guardWindowClose(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
@@ -52,7 +55,7 @@ app.whenReady().then(() => {
   })
 
   const workspaces = registerIPC(app.getVersion(), join(app.getPath('userData'), 'state.json'))
-  app.on('before-quit', () => {
+  app.on('will-quit', () => {
     void workspaces.close()
   })
 

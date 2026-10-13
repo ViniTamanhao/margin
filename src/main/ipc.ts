@@ -1,5 +1,7 @@
 import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron'
-import { channels, type MarginAPI } from '../shared/api'
+import { dirname, join } from 'node:path'
+import { channels, type MarginAPI, type Workspace, type SaveRequest } from '../shared/api'
+import { confirmWindowClose } from './window-lifecycle'
 import { WorkspaceService } from './services/workspace'
 import { AppStateService } from './services/app-state'
 import { DocumentService } from './services/documents'
@@ -7,7 +9,7 @@ import { DocumentService } from './services/documents'
 export function registerIPC(version: string, stateFile: string): WorkspaceService {
   const workspaces = new WorkspaceService()
   const state = new AppStateService(stateFile)
-  const remember = async (workspace: import('../shared/api').Workspace): Promise<void> => {
+  const remember = async (workspace: Workspace): Promise<void> => {
     try {
       await state.remember(workspace.root)
     } catch (error) {
@@ -33,9 +35,10 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
       if (!window.isDestroyed()) window.webContents.send(channels.workspaceChanged, change)
     }
   })
-  const documents = new DocumentService(workspaces)
+  const documents = new DocumentService(workspaces, join(dirname(stateFile), 'recovery'))
   const api: MarginAPI = {
     app: { info: async () => ({ name: 'Margin', version }) },
+    window: { onClosing: () => () => {}, confirmClose: async () => {} },
     workspace: {
       current: async () => {
         await restored
@@ -54,7 +57,7 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
         return workspace
       }
     },
-    document: { read: (path) => documents.read(path) }
+    document: { read: (path) => documents.read(path), save: (request) => documents.save(request) }
   }
   const trusted = (event: IpcMainInvokeEvent): void => {
     if (
@@ -80,6 +83,29 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
     trusted(event)
     if (typeof path !== 'string') throw new Error('Invalid document path.')
     return api.document.read(path)
+  })
+  ipcMain.handle(channels.documentSave, (event, input: unknown) => {
+    trusted(event)
+    if (typeof input !== 'object' || input === null) throw new Error('Invalid save request.')
+    const request = input as Partial<SaveRequest>
+    if (
+      typeof request.path !== 'string' ||
+      typeof request.content !== 'string' ||
+      typeof request.revision !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(request.revision)
+    )
+      throw new Error('Invalid save request.')
+    return api.document.save({
+      path: request.path,
+      content: request.content,
+      revision: request.revision
+    })
+  })
+  ipcMain.handle(channels.windowConfirmClose, (event, saved: unknown) => {
+    trusted(event)
+    if (typeof saved !== 'boolean') throw new Error('Invalid close response.')
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (window) confirmWindowClose(window, saved)
   })
   return workspaces
 }

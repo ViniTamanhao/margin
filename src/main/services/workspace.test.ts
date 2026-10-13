@@ -28,7 +28,9 @@ test('discovers nested Markdown, ignores dependencies and symlinks, reads origin
   const service = new WorkspaceService()
   services.push(service)
   expect((await service.open(root)).files).toEqual(['UPPER.MD', 'notes/a.md'])
-  expect((await new DocumentService(service).read('notes/a.md')).content).toBe('# Hello')
+  expect(
+    (await new DocumentService(service, join(root, '.recovery')).read('notes/a.md')).content
+  ).toBe('# Hello')
   for (const path of [
     '../a.md',
     '/tmp/a.md',

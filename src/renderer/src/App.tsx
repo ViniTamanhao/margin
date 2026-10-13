@@ -27,10 +27,24 @@ function App(): React.JSX.Element {
       unsubscribe()
     }
   }, [])
+  useEffect(
+    () =>
+      window.margin.window.onClosing(() => {
+        void controller
+          .flush()
+          .then((saved) => window.margin.window.confirmClose(saved))
+          .catch(() => {
+            setError('Could not finish saving. The window was kept open.')
+            void window.margin.window.confirmClose(false)
+          })
+      }),
+    [controller]
+  )
   const openFolder = async (): Promise<void> => {
     setBusy(true)
     setError('')
     try {
+      if (!(await controller.flush())) return
       const next = await window.margin.workspace.open()
       if (next) {
         setWorkspace(next)
@@ -79,6 +93,11 @@ function App(): React.JSX.Element {
           </nav>
         )}
         <section className="writing-pane" aria-label="Writing surface">
+          {editor.status === 'error' && (
+            <button className="inline-action" onClick={() => void controller.flush()}>
+              Retry save
+            </button>
+          )}
           {editor.error && (
             <p className="notice" role="alert">
               {editor.error}
@@ -90,9 +109,13 @@ function App(): React.JSX.Element {
               <span aria-live="polite">
                 {editor.status === 'dirty'
                   ? 'Unsaved'
-                  : editor.status === 'loading'
-                    ? 'Opening…'
-                    : ''}
+                  : editor.status === 'saving'
+                    ? 'Saving…'
+                    : editor.status === 'saved'
+                      ? 'Saved'
+                      : editor.status === 'loading'
+                        ? 'Opening…'
+                        : ''}
               </span>
             </div>
           )}

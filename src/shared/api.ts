@@ -3,7 +3,10 @@ export const channels = {
   workspaceOpen: 'workspace:open',
   workspaceCurrent: 'workspace:current',
   documentRead: 'document:read',
-  workspaceChanged: 'workspace:changed'
+  documentSave: 'document:save',
+  workspaceChanged: 'workspace:changed',
+  windowClosing: 'window:closing',
+  windowConfirmClose: 'window:confirm-close'
 } as const
 
 export interface AppInfo {
@@ -25,12 +28,28 @@ export interface DocumentSnapshot {
   content: string
   revision: string
 }
+export interface SaveRequest {
+  path: string
+  content: string
+  revision: string
+}
+export type SaveResult =
+  | { kind: 'saved'; revision: string }
+  | { kind: 'conflict'; current: DocumentSnapshot }
+  | { kind: 'missing' }
 export interface MarginAPI {
   app: { info(): Promise<AppInfo> }
+  window: {
+    onClosing(callback: () => void): () => void
+    confirmClose(saved: boolean): Promise<void>
+  }
   workspace: {
     open(): Promise<Workspace | null>
     current(): Promise<Workspace | null>
     onChanged(callback: (change: WorkspaceChange) => void): () => void
   }
-  document: { read(path: string): Promise<DocumentSnapshot> }
+  document: {
+    read(path: string): Promise<DocumentSnapshot>
+    save(request: SaveRequest): Promise<SaveResult>
+  }
 }
