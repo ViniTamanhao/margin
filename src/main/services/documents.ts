@@ -47,6 +47,17 @@ export class DocumentService {
     }
   }
 
+  async saveCopy(target: string, content: string): Promise<void> {
+    // Recovery copies never replace an existing file, even if it appears after the dialog.
+    const handle = await open(target, 'wx')
+    try {
+      await handle.writeFile(content, 'utf8')
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
+  }
+
   private async preserve(target: string, content: string): Promise<void> {
     const directory = join(this.recoveryDirectory, revisionOf(target))
     await mkdir(directory, { recursive: true })

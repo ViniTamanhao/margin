@@ -27,7 +27,8 @@ const api: MarginAPI = {
   },
   document: {
     read: (path) => ipcRenderer.invoke(channels.documentRead, path),
-    save: (request) => ipcRenderer.invoke(channels.documentSave, request)
+    save: (request) => ipcRenderer.invoke(channels.documentSave, request),
+    saveCopy: (content) => ipcRenderer.invoke(channels.documentSaveCopy, content)
   }
 }
 

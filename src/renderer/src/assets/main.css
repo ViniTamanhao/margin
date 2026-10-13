@@ -124,3 +124,22 @@ h1 {
   color: var(--margin-text-muted);
   border-color: var(--margin-border);
 }
+.conflict-actions {
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg);
+  flex-wrap: wrap;
+}
+.conflict-actions button,
+.inline-action {
+  width: fit-content;
+  background: transparent;
+  border: 1px solid var(--margin-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xs) var(--space-sm);
+  font-size: 12px;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

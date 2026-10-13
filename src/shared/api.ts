@@ -4,6 +4,7 @@ export const channels = {
   workspaceCurrent: 'workspace:current',
   documentRead: 'document:read',
   documentSave: 'document:save',
+  documentSaveCopy: 'document:save-copy',
   workspaceChanged: 'workspace:changed',
   windowClosing: 'window:closing',
   windowConfirmClose: 'window:confirm-close'
@@ -51,5 +52,6 @@ export interface MarginAPI {
   document: {
     read(path: string): Promise<DocumentSnapshot>
     save(request: SaveRequest): Promise<SaveResult>
+    saveCopy(content: string): Promise<string | null>
   }
 }

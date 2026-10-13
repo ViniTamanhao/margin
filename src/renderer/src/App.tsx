@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { Workspace } from '../../shared/api'
 import { EditorController } from './editor/controller'
 import { EditorSurface } from './editor/EditorSurface'
@@ -12,7 +12,10 @@ function App(): React.JSX.Element {
   useEffect(() => {
     let alive = true
     const unsubscribe = window.margin.workspace.onChanged((change) => {
-      if (alive) setWorkspace(change.workspace)
+      if (alive) {
+        setWorkspace(change.workspace)
+        void controller.refresh(change.changedPaths)
+      }
     })
     void window.margin.workspace
       .current()
@@ -26,21 +29,27 @@ function App(): React.JSX.Element {
       alive = false
       unsubscribe()
     }
-  }, [])
+  }, [controller])
   useEffect(
     () =>
       window.margin.window.onClosing(() => {
+        controller.setLocked(true)
         void controller
           .flush()
-          .then((saved) => window.margin.window.confirmClose(saved))
+          .then((saved) => {
+            if (!saved) controller.setLocked(false)
+            return window.margin.window.confirmClose(saved)
+          })
           .catch(() => {
+            controller.setLocked(false)
             setError('Could not finish saving. The window was kept open.')
             void window.margin.window.confirmClose(false)
           })
       }),
     [controller]
   )
-  const openFolder = async (): Promise<void> => {
+  const openFolder = useCallback(async (): Promise<void> => {
+    controller.setLocked(true)
     setBusy(true)
     setError('')
     try {
@@ -54,8 +63,32 @@ function App(): React.JSX.Element {
       setError('Could not open this folder. Check that it is accessible.')
     } finally {
       setBusy(false)
+      controller.setLocked(false)
     }
-  }
+  }, [controller])
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent): void => {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.shiftKey &&
+        event.key.toLowerCase() === 'o' &&
+        !busy &&
+        !editor.locked
+      ) {
+        event.preventDefault()
+        void openFolder()
+      }
+    }
+    const focus = (): void => {
+      void controller.refresh()
+    }
+    window.addEventListener('keydown', keydown)
+    window.addEventListener('focus', focus)
+    return () => {
+      window.removeEventListener('keydown', keydown)
+      window.removeEventListener('focus', focus)
+    }
+  }, [busy, editor.locked, controller, openFolder])
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -63,7 +96,11 @@ function App(): React.JSX.Element {
         <span className="workspace-name" title={workspace?.root}>
           {workspace?.name}
         </span>
-        <button disabled={busy} onClick={() => void openFolder()}>
+        <button
+          title="Open Folder (Ctrl/Cmd+Shift+O)"
+          disabled={busy || editor.locked}
+          onClick={() => void openFolder()}
+        >
           Open Folder
         </button>
       </header>
@@ -84,6 +121,8 @@ function App(): React.JSX.Element {
             {workspace.files.map((path) => (
               <button
                 key={path}
+                disabled={busy || editor.locked}
+                aria-current={editor.path === path ? 'page' : undefined}
                 className={editor.path === path ? 'active' : ''}
                 onClick={() => void controller.open(path)}
               >
@@ -97,6 +136,34 @@ function App(): React.JSX.Element {
             <button className="inline-action" onClick={() => void controller.flush()}>
               Retry save
             </button>
+          )}
+          {editor.status === 'conflict' && (
+            <div className="conflict-actions">
+              <button
+                disabled={editor.locked}
+                onClick={() => void controller.resolveConflict('disk')}
+              >
+                Use disk version
+              </button>
+              <button
+                disabled={editor.locked}
+                onClick={() => void controller.resolveConflict('local')}
+              >
+                Keep my version
+              </button>
+              <button disabled={editor.locked} onClick={() => void controller.saveCopy()}>
+                Save a copy…
+              </button>
+            </div>
+          )}
+          {editor.status === 'missing' && (
+            <div className="conflict-actions">
+              <button disabled={editor.locked} onClick={() => void controller.saveCopy()}>
+                Save a copy…
+              </button>
+              <button onClick={() => void controller.refresh()}>Check again</button>
+              <button onClick={() => controller.closeUnavailable()}>Close if unchanged</button>
+            </div>
           )}
           {editor.error && (
             <p className="notice" role="alert">
@@ -120,7 +187,7 @@ function App(): React.JSX.Element {
             </div>
           )}
           <div className={editor.path ? 'editor-host' : 'editor-host hidden'}>
-            <EditorSurface controller={controller} />
+            <EditorSurface controller={controller} activePath={editor.path} />
           </div>
           {!editor.path && (
             <div className="empty-state">

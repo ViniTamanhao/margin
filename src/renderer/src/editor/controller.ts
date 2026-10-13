@@ -1,9 +1,9 @@
-import { EditorState, type Text } from '@codemirror/state'
+import { Compartment, EditorSelection, EditorState, type Text } from '@codemirror/state'
 import { EditorView, keymap, drawSelection } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
-import type { MarginAPI } from '../../../shared/api'
+import type { MarginAPI, DocumentSnapshot } from '../../../shared/api'
 
 type DocumentStatus = 'saved' | 'dirty' | 'saving' | 'conflict' | 'missing' | 'error'
 interface EditorSession {
@@ -17,6 +17,7 @@ interface EditorSession {
 }
 export interface EditorPresentation {
   path: string | null
+  locked: boolean
   status: DocumentStatus | 'idle' | 'loading'
   error: string
 }
@@ -26,8 +27,15 @@ export class EditorController {
   private sessions = new Map<string, EditorSession>()
   private view: EditorView | null = null
   private generation = 0
+  private locked = false
+  private editability = new Compartment()
   private listeners = new Set<() => void>()
-  private presentation: EditorPresentation = { path: null, status: 'idle', error: '' }
+  private presentation: EditorPresentation = {
+    path: null,
+    status: 'idle',
+    error: '',
+    locked: false
+  }
 
   constructor(private readonly api: MarginAPI['document']) {}
 
@@ -42,6 +50,7 @@ export class EditorController {
   private present(patch: Partial<EditorPresentation>): void {
     const next = { ...this.presentation, ...patch }
     if (
+      next.locked === this.presentation.locked &&
       next.path === this.presentation.path &&
       next.status === this.presentation.status &&
       next.error === this.presentation.error
@@ -58,6 +67,10 @@ export class EditorController {
     return EditorState.create({
       doc: content,
       extensions: [
+        this.editability.of([
+          EditorState.readOnly.of(this.locked),
+          EditorView.editable.of(!this.locked)
+        ]),
         markdown(),
         history(),
         drawSelection(),
@@ -103,6 +116,10 @@ export class EditorController {
     }
   }
 
+  focus(): void {
+    this.view?.focus()
+  }
+
   async open(path: string): Promise<void> {
     const generation = ++this.generation
     const previous = this.presentation.path
@@ -127,6 +144,7 @@ export class EditorController {
       this.present({ path, status: session.status, error: session.error })
       this.view?.setState(session.state)
       this.view?.focus()
+      void this.refresh([path])
     } catch {
       if (generation === this.generation)
         this.present({
@@ -152,7 +170,11 @@ export class EditorController {
       await session.saving
       return this.save(path)
     }
-    if (session.status === 'saved') return true
+    if (
+      session.status === 'saved' ||
+      (session.status === 'missing' && session.state.doc.eq(session.savedDoc))
+    )
+      return true
     if (session.status === 'conflict' || session.status === 'missing') return false
     const state = session.state
     session.status = 'saving'
@@ -210,6 +232,141 @@ export class EditorController {
       }
     }
     return true
+  }
+
+  setLocked(locked: boolean): void {
+    this.locked = locked
+    this.present({ locked })
+    for (const session of this.sessions.values()) {
+      session.state = session.state.update({
+        effects: this.editability.reconfigure([
+          EditorState.readOnly.of(locked),
+          EditorView.editable.of(!locked)
+        ])
+      }).state
+    }
+    const active = this.presentation.path ? this.sessions.get(this.presentation.path) : undefined
+    if (active) this.view?.setState(active.state)
+  }
+
+  async refresh(paths: readonly string[] = [...this.sessions.keys()]): Promise<void> {
+    await Promise.all(
+      paths.map(async (path) => {
+        const session = this.sessions.get(path)
+        if (!session) return
+        if (session.saving) await session.saving
+        const revision = session.revision
+        try {
+          const snapshot = await this.api.read(path)
+          if (
+            this.sessions.get(path) !== session ||
+            session.saving ||
+            session.revision !== revision
+          )
+            return
+          if (snapshot.revision === session.revision) {
+            if (session.status === 'missing') {
+              session.status = session.state.doc.eq(session.savedDoc) ? 'saved' : 'dirty'
+              session.error = ''
+              this.schedule(path, session)
+            }
+          } else if (!session.state.doc.eq(session.savedDoc)) {
+            clearTimeout(session.timer)
+            session.status = 'conflict'
+            session.error =
+              'This file changed outside Margin. Your edits are kept here; autosave is paused.'
+          } else this.adopt(path, session, snapshot)
+        } catch {
+          if (
+            this.sessions.get(path) !== session ||
+            session.saving ||
+            session.revision !== revision
+          )
+            return
+          clearTimeout(session.timer)
+          session.status = 'missing'
+          session.error =
+            'This file is unavailable (removed, renamed, or unreadable). Your text is kept here.'
+        }
+        this.show(path, session)
+      })
+    )
+  }
+
+  private adopt(path: string, session: EditorSession, snapshot: DocumentSnapshot): void {
+    clearTimeout(session.timer)
+    const state = this.state(snapshot.content)
+    const selection = EditorSelection.create(
+      session.state.selection.ranges.map((range) =>
+        EditorSelection.range(
+          Math.min(range.anchor, state.doc.length),
+          Math.min(range.head, state.doc.length)
+        )
+      ),
+      session.state.selection.mainIndex
+    )
+    session.state = state.update({ selection }).state
+    session.savedDoc = session.state.doc
+    session.revision = snapshot.revision
+    session.status = 'saved'
+    session.error = ''
+    if (this.presentation.path === path) this.view?.setState(session.state)
+  }
+
+  async resolveConflict(choice: 'disk' | 'local'): Promise<void> {
+    const path = this.presentation.path
+    const session = path ? this.sessions.get(path) : undefined
+    if (!path || !session || session.status !== 'conflict') return
+    this.setLocked(true)
+    try {
+      const latest = await this.api.read(path)
+      if (choice === 'disk') this.adopt(path, session, latest)
+      else {
+        // This is an explicit user decision. A further disk change still causes a conflict.
+        session.revision = latest.revision
+        session.status = 'dirty'
+        session.error = ''
+        await this.save(path)
+      }
+      this.show(path, session)
+    } catch {
+      session.error = 'Could not resolve this file. Save a copy of your edits instead.'
+      this.show(path, session)
+    } finally {
+      this.setLocked(false)
+      this.view?.focus()
+    }
+  }
+
+  async saveCopy(): Promise<void> {
+    const path = this.presentation.path
+    const session = path ? this.sessions.get(path) : undefined
+    if (!path || !session) return
+    this.setLocked(true)
+    try {
+      if (await this.api.saveCopy(session.state.sliceDoc())) this.closeDocument(path)
+    } catch {
+      session.error = 'Could not save a copy. Choose a new filename in a writable folder.'
+      this.show(path, session)
+    } finally {
+      this.setLocked(false)
+    }
+  }
+
+  closeUnavailable(): void {
+    const path = this.presentation.path
+    const session = path ? this.sessions.get(path) : undefined
+    if (path && session?.status === 'missing' && session.state.doc.eq(session.savedDoc))
+      this.closeDocument(path)
+  }
+
+  private closeDocument(path: string): void {
+    const session = this.sessions.get(path)
+    clearTimeout(session?.timer)
+    this.sessions.delete(path)
+    this.generation++
+    this.present({ path: null, status: 'idle', error: '' })
+    this.view?.setState(this.state(''))
   }
 
   reset(): void {

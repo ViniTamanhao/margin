@@ -61,3 +61,12 @@ test('rejects non-UTF-8 files instead of replacing invalid bytes', async () => {
   await writeFile(join(root, 'a.md'), Buffer.from([0xff, 0xfe]))
   await expect(documents.read('a.md')).rejects.toThrow('UTF-8')
 })
+
+test('save-copy creates a new document and refuses to overwrite an existing one', async () => {
+  const { root, documents } = await fixture()
+  const target = join(root, 'copy.md')
+  await documents.saveCopy(target, 'Recovered local edits')
+  expect(await readFile(target, 'utf8')).toBe('Recovered local edits')
+  await expect(documents.saveCopy(target, 'Overwrite')).rejects.toThrow()
+  expect(await readFile(target, 'utf8')).toBe('Recovered local edits')
+})

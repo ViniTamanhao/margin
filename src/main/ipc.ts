@@ -57,7 +57,20 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
         return workspace
       }
     },
-    document: { read: (path) => documents.read(path), save: (request) => documents.save(request) }
+    document: {
+      read: (path) => documents.read(path),
+      save: (request) => documents.save(request),
+      saveCopy: async (content) => {
+        const result = await dialog.showSaveDialog({
+          title: 'Save your edits as a new Markdown file',
+          defaultPath: 'Recovered.md',
+          filters: [{ name: 'Markdown', extensions: ['md'] }]
+        })
+        if (result.canceled || !result.filePath) return null
+        await documents.saveCopy(result.filePath, content)
+        return result.filePath
+      }
+    }
   }
   const trusted = (event: IpcMainInvokeEvent): void => {
     if (
@@ -100,6 +113,11 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
       content: request.content,
       revision: request.revision
     })
+  })
+  ipcMain.handle(channels.documentSaveCopy, (event, content: unknown) => {
+    trusted(event)
+    if (typeof content !== 'string') throw new Error('Invalid document contents.')
+    return api.document.saveCopy(content)
   })
   ipcMain.handle(channels.windowConfirmClose, (event, saved: unknown) => {
     trusted(event)
