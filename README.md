@@ -2,7 +2,8 @@
 
 A minimal, local-first, keyboard-first Markdown editor. **Telescope for prose.**
 
-Sessions 0–2 provide normal folder workspaces and a CodeMirror writing surface.
+Margin provides normal folder workspaces, a CodeMirror writing surface, contextual
+Markdown presentation and lightweight appearance settings.
 Markdown files remain the source of truth; there is no project format or database.
 
 ## Run
@@ -17,6 +18,9 @@ appear in the temporary file list; `.git`, `node_modules`, `.hg`, `.svn` and sym
 links are excluded. The last workspace is restored on startup if it is accessible.
 
 - **Ctrl/Cmd+Shift+O:** Open Folder.
+- **Ctrl/Cmd+B:** expand/collapse Files; opening a file collapses the panel.
+- **Ctrl/Cmd+,:** appearance settings.
+- **Escape:** close Files or cancel appearance changes and restore focus.
 - **Tab, Up/Down, Home/End, Enter:** navigate and open files in the temporary list.
 - **Ctrl/Cmd+S:** flush pending saves.
 - Standard CodeMirror selection, undo and redo shortcuts work in the editor.
@@ -26,6 +30,27 @@ flushes pending edits first. Clean documents reload external changes; conflictin
 local edits stay in memory and pause autosave. Choose the disk version, explicitly
 keep your version, or save your edits to a new file. A conflict or failed save keeps
 the window open.
+
+## Appearance and Markdown presentation
+
+Margin Dark is the default; Margin Light is available in Appearance. Font family,
+font size (12–32 px) and seven semantic colors update the UI in a live preview.
+Choose **Done** to save; Cancel/Escape restores the saved appearance. Custom colors
+override either theme until **Reset colors to theme** clears them. Installed fonts
+and normal CSS font fallback lists are supported.
+
+Validated settings are stored in Electron's `userData/appearance.json`, separate
+from workspace state and Markdown files. Writes are serialized and staged before
+rename. Missing, invalid or unreadable settings fall back to Margin Dark.
+
+CodeMirror viewport decorations hide ATX heading markers, single-line bold/italic
+markers and inline-code backticks outside the active construct. Any touching cursor
+or selection reveals its source syntax, including selections crossing constructs
+and multiple cursors. Markdown source, clipboard and undo history stay canonical.
+Heading text keeps the same size and weight while markers appear/disappear, though
+marker widths can still shift text or wrapping. Multiline constructs, fenced code,
+links, setext headings and strikethrough remain visible; this is intentionally a
+small source-editor presentation layer.
 
 ## Architecture
 
@@ -84,9 +109,10 @@ local validation.
 `test:smoke` requires a desktop display and a current production build. It launches the
 real Electron application against temporary files, substitutes deterministic native
 dialog results, and checks editing, saving, conflicts, keyboard navigation, window
-closing and workspace restoration across separate processes. It leaves its temporary
-artifacts and screenshot in the printed path for inspection.
+closing, contextual syntax, Markdown clipboard behavior, appearance previews, focus
+restoration and workspace/settings restoration across separate processes. It leaves
+its temporary artifacts and screenshots in the printed path for inspection.
 
 See [the Sessions 0–2 implementation report](docs/sessions-0-2-report.md) for decisions,
-validation, commit progression and remaining limits. Search, palettes, themes,
+validation, commit progression and remaining limits. Search, palettes,
 backlinks, graphs, plugins, sync and AI are deferred to later sessions.

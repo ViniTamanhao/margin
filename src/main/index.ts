@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { guardWindowClose } from './window-lifecycle'
 import { registerIPC } from './ipc'
+import { themes } from '../shared/appearance'
 import icon from '../../resources/icon.png?asset'
 
 function createWindow(): void {
@@ -11,6 +12,7 @@ function createWindow(): void {
     width: 900,
     height: 670,
     show: false,
+    backgroundColor: themes.dark.bg,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {

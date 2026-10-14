@@ -273,3 +273,25 @@ button:disabled {
 .settings-footer {
   justify-content: flex-end;
 }
+
+.cm-md-heading,
+.cm-md-strong {
+  font-weight: 600;
+}
+.cm-md-emphasis {
+  font-style: italic;
+}
+.cm-md-code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.9em;
+}
+.cm-md-link {
+  color: var(--margin-accent);
+  text-decoration: underline;
+}
+.cm-md-marker {
+  color: var(--margin-text-muted);
+}
+.editor-surface .cm-content ::selection {
+  background: var(--margin-selection);
+}

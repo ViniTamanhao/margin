@@ -5,6 +5,7 @@ import { EditorSurface } from './editor/EditorSurface'
 import type { AppearanceSettings } from '../../shared/appearance'
 import { applyAppearance } from './appearance'
 import { AppearanceDialog } from './components/AppearanceDialog'
+import { commandTooltip, shellCommandForKey, type ShellCommandId } from './commands'
 import { Icon } from './components/Icon'
 
 function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): React.JSX.Element {
@@ -43,9 +44,8 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
     () =>
       window.margin.window.onClosing(() => {
         controller.setLocked(true)
-        void controller
-          .flush()
-          .then((saved) => {
+        void Promise.all([controller.flush(), window.margin.appearance.read()])
+          .then(([saved]) => {
             if (!saved) controller.setLocked(false)
             return window.margin.window.confirmClose(saved)
           })
@@ -75,32 +75,42 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       controller.setLocked(false)
     }
   }, [controller])
+  const executeCommand = useCallback(
+    (id: ShellCommandId): void => {
+      if (id === 'workspace.open') {
+        if (!busy && !editor.locked) void openFolder()
+      }
+      if (id === 'workspace.toggle-files' && workspace) {
+        setFilesExpanded(!filesExpanded)
+        if (filesExpanded) {
+          if (editor.path) controller.focus()
+          else filesToggle.current?.focus()
+        }
+      }
+      if (id === 'appearance.open') {
+        setFilesExpanded(false)
+        setSettingsOpen(true)
+      }
+    },
+    [busy, editor.locked, editor.path, controller, filesExpanded, openFolder, workspace]
+  )
   useEffect(() => {
     if (filesExpanded)
       filesPanel.current?.querySelector<HTMLButtonElement>('[aria-current], button')?.focus()
   }, [filesExpanded])
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {
-      if (settingsOpen) return
-      if ((event.metaKey || event.ctrlKey) && event.key === ',') {
+      if (settingsOpen || event.defaultPrevented) return
+      if (event.key === 'Escape' && filesExpanded) {
         event.preventDefault()
         setFilesExpanded(false)
-        setSettingsOpen(true)
+        filesToggle.current?.focus()
+        return
       }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'b') {
+      const command = shellCommandForKey(event)
+      if (command) {
         event.preventDefault()
-        setFilesExpanded((expanded) => !expanded)
-        if (filesExpanded) controller.focus()
-      }
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        event.shiftKey &&
-        event.key.toLowerCase() === 'o' &&
-        !busy &&
-        !editor.locked
-      ) {
-        event.preventDefault()
-        void openFolder()
+        executeCommand(command)
       }
     }
     const focus = (): void => {
@@ -112,7 +122,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       window.removeEventListener('keydown', keydown)
       window.removeEventListener('focus', focus)
     }
-  }, [busy, editor.locked, controller, openFolder, filesExpanded, settingsOpen])
+  }, [controller, executeCommand, filesExpanded, settingsOpen])
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -123,9 +133,9 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
         <button
           className="icon-button"
           aria-label="Open Folder"
-          title="Open Folder (Ctrl/Cmd+Shift+O)"
+          title={commandTooltip('workspace.open')}
           disabled={busy || editor.locked}
-          onClick={() => void openFolder()}
+          onClick={() => executeCommand('workspace.open')}
         >
           <Icon name="folder" />
         </button>
@@ -146,24 +156,19 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
             ref={filesToggle}
             className="icon-button"
             aria-label="Toggle files"
-            title="Files (Ctrl/Cmd+B)"
+            disabled={!workspace}
+            title={commandTooltip('workspace.toggle-files')}
             aria-expanded={filesExpanded}
-            aria-controls="workspace-files"
-            onClick={() => {
-              setFilesExpanded(!filesExpanded)
-              if (filesExpanded) controller.focus()
-            }}
+            aria-controls={workspace ? 'workspace-files' : undefined}
+            onClick={() => executeCommand('workspace.toggle-files')}
           >
             <Icon name="files" />
           </button>
           <button
             className="icon-button settings-toggle"
             aria-label="Appearance settings"
-            title="Appearance (Ctrl/Cmd+,)"
-            onClick={() => {
-              setFilesExpanded(false)
-              setSettingsOpen(true)
-            }}
+            title={commandTooltip('appearance.open')}
+            onClick={() => executeCommand('appearance.open')}
           >
             <Icon name="settings" />
           </button>

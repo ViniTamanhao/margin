@@ -29,6 +29,8 @@ export class AppearanceService {
       await writeFile(`${this.file}.tmp`, JSON.stringify(settings), 'utf8')
       await rename(`${this.file}.tmp`, this.file)
     })
+    // Keep the queue usable after a failed write; the caller still receives
+    // the rejecting promise and presents the save failure.
     this.pending = write.catch(() => {})
     return write
   }

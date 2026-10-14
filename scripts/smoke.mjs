@@ -18,6 +18,7 @@ async function run(mode) {
     delete environment.ELECTRON_RUN_AS_NODE
     const child = spawn(require('electron'), ['scripts/smoke-app.mjs'], {
       env: environment,
+      timeout: 60_000,
       stdio: 'inherit'
     })
     child.on('error', reject)

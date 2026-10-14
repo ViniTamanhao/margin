@@ -30,11 +30,31 @@ async function run() {
     window.webContents.on('console-message', (_event, _level, message) => {
       if (message.includes('Error')) console.error('Renderer:', message)
     })
+    window.webContents.setBackgroundThrottling(false)
+    window.show()
+    window.focus()
     const evaluate = (code) => window.webContents.executeJavaScript(code)
-    const click = (label) =>
-      evaluate(
-        `Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === ${JSON.stringify(label)})?.click()`
+    const screenshot = async (name) => {
+      await evaluate(
+        'Promise.race([new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))), new Promise(resolve => setTimeout(resolve, 500))])'
       )
+      await sleep(200)
+      await writeFile(join(root, name), (await window.capturePage()).toPNG())
+    }
+    const click = async (label) => {
+      if (label.endsWith('.md')) {
+        const expanded = await evaluate(
+          "document.querySelector('.file-list')?.classList.contains('expanded')"
+        )
+        if (!expanded) {
+          await evaluate('document.querySelector(\'[aria-label="Toggle files"]\').click()')
+          await sleep(160)
+        }
+      }
+      return evaluate(
+        `Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === ${JSON.stringify(label)} || button.getAttribute('aria-label') === ${JSON.stringify(label)})?.click()`
+      )
+    }
     const text = () => evaluate("document.querySelector('.cm-content')?.textContent ?? ''")
     const heading = () => evaluate("document.querySelector('.document-heading')?.textContent ?? ''")
     await until(async () => {
@@ -65,16 +85,78 @@ async function run() {
         async () => (await evaluate('document.querySelectorAll(".file-list button").length')) >= 2,
         'workspace restored'
       )
-      console.log('PASS previous workspace restored after process restart')
+      assert.equal(
+        await evaluate('getComputedStyle(document.documentElement).colorScheme'),
+        'light'
+      )
+      assert.equal(
+        await evaluate(
+          "getComputedStyle(document.documentElement).getPropertyValue('--editor-font-size').trim()"
+        ),
+        '22px'
+      )
+      assert.equal(
+        await evaluate(
+          "getComputedStyle(document.documentElement).getPropertyValue('--editor-font-family').trim()"
+        ),
+        'Georgia, serif'
+      )
+      assert.equal(
+        await evaluate(
+          "getComputedStyle(document.documentElement).getPropertyValue('--margin-accent').trim()"
+        ),
+        '#536a5a'
+      )
+      console.log('PASS workspace, theme, font and color restored after process restart')
       window.close()
       await until(() => window.isDestroyed(), 'restored window closes')
       app.exit(0)
     } else {
+      assert.equal(await evaluate('getComputedStyle(document.documentElement).colorScheme'), 'dark')
+      assert.equal(
+        await evaluate("document.querySelector('.app-header').getBoundingClientRect().height"),
+        36
+      )
+      assert.equal(
+        await evaluate("document.querySelector('.navigation-rail').getBoundingClientRect().width"),
+        40
+      )
       await click('Open Folder')
       await until(
         async () => (await evaluate('document.querySelectorAll(".file-list button").length')) === 2,
         'recursive Markdown discovery'
       )
+      assert.equal(await evaluate("document.querySelector('.file-list').inert"), true)
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'b', modifiers: ['control'] })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'b', modifiers: ['control'] })
+      await until(
+        async () =>
+          await evaluate("document.querySelector('.file-list').classList.contains('expanded')"),
+        'files keyboard command'
+      )
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+      await until(
+        async () => await evaluate("document.querySelector('.file-list').inert"),
+        'Escape collapses files'
+      )
+      assert.equal(
+        await evaluate("document.activeElement.getAttribute('aria-label')"),
+        'Toggle files',
+        'Escape restores rail focus'
+      )
+      const editorBounds = await evaluate(
+        "document.querySelector('.writing-pane').getBoundingClientRect().x"
+      )
+      await click('Toggle files')
+      await sleep(160)
+      assert.equal(await evaluate("document.querySelector('.file-list').inert"), false)
+      assert.equal(
+        await evaluate("document.querySelector('.writing-pane').getBoundingClientRect().x"),
+        editorBounds,
+        'rail expansion does not move document'
+      )
+      await screenshot('files.png')
       await evaluate("document.querySelector('.file-list button').focus()")
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Down' })
       window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Down' })
@@ -86,8 +168,60 @@ async function run() {
       window.webContents.sendInputEvent({ type: 'char', keyCode: '\r' })
       window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
       await until(async () => (await heading()).includes('nested/b.md'), 'file opens from keyboard')
+      assert.equal(
+        await evaluate("document.querySelector('.file-list').inert"),
+        true,
+        'file opening collapses rail'
+      )
       await click('a.md')
       await until(async () => (await text()).includes('# Original'), 'document opens')
+      const markdown = '## Heading\n\n**bold** *italic* `code`\n\nTail\n'
+      await writeFile(join(root, 'workspace/a.md'), markdown)
+      await until(async () => (await text()).includes('Heading'), 'presentation fixture loaded')
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'End', modifiers: ['control'] })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'End', modifiers: ['control'] })
+      await until(
+        async () =>
+          !(await text()).includes('##') &&
+          !(await text()).includes('**') &&
+          !(await text()).includes('`'),
+        'inactive syntax hidden'
+      )
+      assert.equal(
+        (await evaluate("window.margin.document.read('a.md')")).content,
+        markdown,
+        'decorations leave source untouched'
+      )
+      await screenshot('dark.png')
+      window.webContents.sendInputEvent({
+        type: 'keyDown',
+        keyCode: 'Home',
+        modifiers: ['control']
+      })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Home', modifiers: ['control'] })
+      await until(
+        async () => (await text()).includes('## Heading'),
+        'cursor reveals heading syntax'
+      )
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'a', modifiers: ['control'] })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'a', modifiers: ['control'] })
+      await until(
+        async () => (await text()).includes('**bold**') && (await text()).includes('`code`'),
+        'crossing selection reveals syntax'
+      )
+      const copied = await evaluate(`(() => {
+        const data = new DataTransfer();
+        document.querySelector('.cm-content').dispatchEvent(new ClipboardEvent('copy', { clipboardData: data, bubbles: true }));
+        return data.getData('text/plain');
+      })()`)
+      assert.equal(copied, markdown, 'copy uses actual Markdown source')
+      await evaluate(`(() => {
+        const data = new DataTransfer(); data.setData('text/plain', ${JSON.stringify(markdown)});
+        document.querySelector('.cm-content').dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+      })()`)
+      await until(async () => (await text()).includes('Tail'), 'paste keeps Markdown editable')
+      await writeFile(join(root, 'workspace/a.md'), '# Original\n')
+      await until(async () => (await text()).includes('Original'), 'original fixture restored')
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'End', modifiers: ['control'] })
       window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'End', modifiers: ['control'] })
       await until(
@@ -178,18 +312,91 @@ async function run() {
         async () => (await heading()).includes('nested/b.md'),
         'file opens after recovery'
       )
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: ',', modifiers: ['control'] })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: ',', modifiers: ['control'] })
+      await until(
+        async () => await evaluate("document.querySelector('dialog')?.open"),
+        'appearance keyboard command'
+      )
+      assert.equal(
+        await evaluate("document.querySelector('dialog').contains(document.activeElement)"),
+        true,
+        'dialog takes focus'
+      )
+      await evaluate(`(() => {
+        const theme = document.querySelector('dialog select');
+        theme.value = 'light'; theme.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`)
+      await until(
+        async () =>
+          await evaluate("getComputedStyle(document.documentElement).colorScheme === 'light'"),
+        'immediate theme preview'
+      )
+      await screenshot('settings.png')
+      await click('Cancel')
+      await until(
+        async () => await evaluate("!document.querySelector('dialog')"),
+        'cancel settings'
+      )
+      assert.equal(
+        await evaluate('getComputedStyle(document.documentElement).colorScheme'),
+        'dark',
+        'cancel restores theme'
+      )
+      assert.equal(
+        await evaluate("document.activeElement?.classList.contains('cm-content')"),
+        true,
+        'settings restore editor focus'
+      )
+      await click('Appearance settings')
+      await evaluate(`(() => {
+        const theme = document.querySelector('dialog select');
+        theme.value = 'light'; theme.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`)
+      async function setInput(selector, value) {
+        await evaluate(`(() => {
+          const input = document.querySelector(${JSON.stringify(selector)});
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)});
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        })()`)
+      }
+      await setInput('dialog input:not([type])', 'Georgia, serif')
+      await setInput('dialog input[type=number]', '22')
+      await setInput('dialog input[type=color]', '#f7f6f2')
+      await evaluate(`(() => {
+        const input = document.querySelectorAll('dialog input[type=color]')[5];
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '#536a5a');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      })()`)
+      await click('Done')
+      await until(
+        async () => await evaluate("!document.querySelector('dialog')"),
+        'settings persisted'
+      )
+      assert.equal(
+        await evaluate(
+          "getComputedStyle(document.documentElement).getPropertyValue('--editor-font-size').trim()"
+        ),
+        '22px'
+      )
+      const appearance = JSON.parse(await readFile(join(root, 'app-data/appearance.json'), 'utf8'))
+      assert.equal(appearance.theme, 'light')
+      assert.equal(appearance.fontFamily, 'Georgia, serif')
+      assert.equal(appearance.colors.accent, '#536a5a')
+      await screenshot('light.png')
+      await evaluate("document.querySelector('.cm-content').focus()")
       await window.webContents.insertText(' flush before close')
       await evaluate(
-        'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))'
+        'Promise.race([new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))), new Promise(resolve => setTimeout(resolve, 500))])'
       )
-      await writeFile(join(root, 'screenshot.png'), (await window.capturePage()).toPNG())
+      await screenshot('screenshot.png')
       window.close()
       await until(() => window.isDestroyed(), 'close flush completed')
       assert.ok(
         (await readFile(join(root, 'workspace/nested/b.md'), 'utf8')).includes('flush before close')
       )
       console.log(
-        'PASS isolated preload, folder picker, editing, autosave, undo/redo, selection restoration, external reload, conflicts, recovery copy and close flush'
+        'PASS compact chrome, temporary rail, syntax hiding/reveal, Markdown clipboard, live appearance, focus restoration, isolated preload, editing, autosave, undo/redo, external reload/conflicts, recovery copy and close flush'
       )
       app.exit(0)
     }

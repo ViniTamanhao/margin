@@ -57,3 +57,8 @@ test('nested emphasis and viewport-limited collection stay ordered', () => {
   const markers = hiddenMarkdownMarkers(editor, 11, 33)
   expect(markers.map(({ from, to }) => editor.sliceDoc(from, to))).toEqual(['**', '*', '*', '**'])
 })
+
+test('a cursor in heading indentation reveals markers on that line', () => {
+  expect(hiddenText(state('   ## Heading\nElsewhere', 0))).toEqual([])
+  expect(hiddenText(state('   ## Heading\nElsewhere'))).toEqual(['## '])
+})
