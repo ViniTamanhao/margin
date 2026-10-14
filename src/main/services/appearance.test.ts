@@ -46,3 +46,19 @@ test('defaults to dark, serializes writes and persists independently of workspac
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+test('uses system sans for both themes and migrates the old default without changing custom fonts', () => {
+  for (const theme of ['dark', 'light'] as const) {
+    expect(parseAppearance({ ...defaultAppearance, theme })?.fontFamily).toContain('sans-serif')
+    expect(
+      parseAppearance({
+        ...defaultAppearance,
+        theme,
+        fontFamily: "'Iowan Old Style', 'Palatino Linotype', Georgia, serif"
+      })?.fontFamily
+    ).toBe(defaultAppearance.fontFamily)
+    expect(
+      parseAppearance({ ...defaultAppearance, theme, fontFamily: 'Georgia, serif' })?.fontFamily
+    ).toBe('Georgia, serif')
+  }
+})

@@ -251,7 +251,7 @@ async function run() {
       const typography = await evaluate(
         "({ font: getComputedStyle(document.querySelector('.cm-scroller')).fontFamily, padding: getComputedStyle(document.querySelector('.cm-content')).paddingLeft })"
       )
-      assert.ok(typography.font.includes('Georgia'), 'editor consumes typography tokens')
+      assert.ok(typography.font.includes('sans-serif'), 'editor consumes typography tokens')
       assert.equal(typography.padding, '48px', 'editor consumes spacing tokens')
       const selection = await evaluate('window.getSelection().anchorOffset')
       await click('nested/b.md')

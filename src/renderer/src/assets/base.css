@@ -8,7 +8,7 @@
   --margin-accent: #a0c4ac;
   --margin-selection: #364c40;
   --margin-error: #eea49c;
-  --editor-font-family: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --editor-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --editor-font-size: 18px;
   --editor-line-height: 1.75;
   --editor-content-width: 760px;
