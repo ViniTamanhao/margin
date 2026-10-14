@@ -1,8 +1,7 @@
-import { ElectronAPI } from '@electron-toolkit/preload'
+import type { MarginAPI } from '../shared/api'
 
 declare global {
   interface Window {
-    electron: ElectronAPI
-    api: unknown
+    margin: MarginAPI
   }
 }
