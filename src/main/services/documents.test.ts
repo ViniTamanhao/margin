@@ -53,8 +53,12 @@ test('serializes competing saves so an older revision cannot replace a newer sav
     documents.save({ ...original, content: 'First' }),
     documents.save({ ...original, content: 'Second' })
   ])
-  expect(results.map((result) => result.kind)).toEqual(['saved', 'conflict'])
-  expect(await readFile(join(root, 'a.md'), 'utf8')).toBe('First')
+  // Async path validation may finish in either order before saves enter the queue.
+  expect(results.map((result) => result.kind).sort()).toEqual(['conflict', 'saved'])
+  const winner = results[0].kind === 'saved' ? 'First' : 'Second'
+  expect(await readFile(join(root, 'a.md'), 'utf8')).toBe(winner)
+  const conflict = results.find((result) => result.kind === 'conflict')
+  expect(conflict?.kind === 'conflict' && conflict.current.content).toBe(winner)
 })
 test('rejects non-UTF-8 files instead of replacing invalid bytes', async () => {
   const { root, documents } = await fixture()
