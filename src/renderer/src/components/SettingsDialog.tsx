@@ -1,24 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  colorKeys,
-  parseAppearance,
-  themes,
-  type AppearanceSettings,
-  type ColorKey
-} from '../../../shared/appearance'
+import { parseAppearance, type AppearanceSettings } from '../../../shared/appearance'
+import { AppearanceSection } from './AppearanceSection'
 import { applyAppearance } from '../appearance'
 import { Icon } from './Icon'
-const colorLabels: Record<ColorKey, string> = {
-  bg: 'Background',
-  surface: 'Surface',
-  text: 'Text',
-  'text-muted': 'Muted text',
-  border: 'Border',
-  accent: 'Accent',
-  selection: 'Selection'
-}
+const settingsSections = [{ id: 'appearance', title: 'Appearance' }] as const
+type SettingsSectionId = (typeof settingsSections)[number]['id']
 
-export function AppearanceDialog({
+export function SettingsDialog({
   settings,
   onSaved,
   onClose
@@ -29,6 +17,7 @@ export function AppearanceDialog({
 }): React.JSX.Element {
   const dialog = useRef<HTMLDialogElement>(null)
   const restoreFocus = useRef<HTMLElement | null>(null)
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>('appearance')
   const [draft, setDraft] = useState(settings)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -69,15 +58,15 @@ export function AppearanceDialog({
   return (
     <dialog
       ref={dialog}
-      className="appearance-dialog"
-      aria-labelledby="appearance-title"
+      className="settings-dialog"
+      aria-labelledby="settings-title"
       onCancel={(event) => {
         event.preventDefault()
         if (!saving) cancel()
       }}
     >
       <div className="settings-heading">
-        <h2 id="appearance-title">Appearance</h2>
+        <h2 id="settings-title">Settings</h2>
         <button
           className="icon-button"
           aria-label="Cancel appearance changes"
@@ -88,57 +77,25 @@ export function AppearanceDialog({
           <Icon name="close" />
         </button>
       </div>
-      <fieldset disabled={saving}>
-        <label>
-          Theme
-          <select
-            value={draft.theme}
-            onChange={(event) =>
-              change({ ...draft, theme: event.target.value === 'light' ? 'light' : 'dark' })
-            }
-          >
-            <option value="dark">Margin Dark</option>
-            <option value="light">Margin Light</option>
-          </select>
-        </label>
-        <label>
-          Editor font
-          <input
-            value={draft.fontFamily}
-            maxLength={200}
-            onChange={(event) => change({ ...draft, fontFamily: event.target.value })}
-          />
-        </label>
-        <label>
-          Font size
-          <input
-            type="number"
-            min="12"
-            max="32"
-            step="1"
-            value={draft.fontSize}
-            onChange={(event) => change({ ...draft, fontSize: Number(event.target.value) })}
-          />
-        </label>
-        <div className="settings-colors">
-          {colorKeys.map((key) => (
-            <label key={key}>
-              {colorLabels[key]}
-              <input
-                type="color"
-                value={draft.colors[key] ?? themes[draft.theme][key]}
-                onChange={(event) =>
-                  change({ ...draft, colors: { ...draft.colors, [key]: event.target.value } })
-                }
-              />
-            </label>
+      <div className="settings-body">
+        <nav className="settings-navigation" aria-label="Settings sections">
+          {settingsSections.map((section) => (
+            <button
+              key={section.id}
+              disabled={saving}
+              aria-current={activeSection === section.id ? 'page' : undefined}
+              onClick={() => setActiveSection(section.id)}
+            >
+              {section.title}
+            </button>
           ))}
-        </div>
-        <p className="settings-hint">Custom colors apply to both themes.</p>
-        <button className="text-button" onClick={() => change({ ...draft, colors: {} })}>
-          Reset colors to theme
-        </button>
-      </fieldset>
+        </nav>
+        <section className="settings-content" aria-labelledby="settings-section-title">
+          {activeSection === 'appearance' && (
+            <AppearanceSection draft={draft} saving={saving} onChange={change} />
+          )}
+        </section>
+      </div>
       {error && (
         <p className="notice" role="alert">
           {error}

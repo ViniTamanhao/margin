@@ -4,7 +4,7 @@ import { EditorController } from './editor/controller'
 import { EditorSurface } from './editor/EditorSurface'
 import type { AppearanceSettings } from '../../shared/appearance'
 import { applyAppearance } from './appearance'
-import { AppearanceDialog } from './components/AppearanceDialog'
+import { SettingsDialog } from './components/SettingsDialog'
 import { commandTooltip, shellCommandForKey, type ShellCommandId } from './commands'
 import { Icon } from './components/Icon'
 
@@ -299,7 +299,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
         </section>
       </div>
       {settingsOpen && (
-        <AppearanceDialog
+        <SettingsDialog
           settings={appearance}
           onSaved={(next) => {
             setAppearance(next)

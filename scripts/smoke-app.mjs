@@ -35,6 +35,9 @@ async function run() {
     window.focus()
     const evaluate = (code) => window.webContents.executeJavaScript(code)
     const screenshot = async (name) => {
+      window.show()
+      window.focus()
+      await sleep(200)
       await evaluate(
         'Promise.race([new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))), new Promise(resolve => setTimeout(resolve, 500))])'
       )
@@ -323,6 +326,23 @@ async function run() {
         true,
         'dialog takes focus'
       )
+      assert.equal(
+        await evaluate("document.querySelector('#settings-title').textContent"),
+        'Settings'
+      )
+      assert.equal(
+        await evaluate("document.querySelectorAll('.settings-navigation button').length"),
+        1
+      )
+      assert.equal(
+        await evaluate("document.querySelector('.settings-navigation [aria-current]').textContent"),
+        'Appearance'
+      )
+      assert.ok(
+        await evaluate("document.querySelector('dialog').getBoundingClientRect().width > 600"),
+        'intentional settings surface'
+      )
+      await screenshot('settings-dark.png')
       await evaluate(`(() => {
         const theme = document.querySelector('dialog select');
         theme.value = 'light'; theme.dispatchEvent(new Event('change', { bubbles: true }));
@@ -333,10 +353,11 @@ async function run() {
         'immediate theme preview'
       )
       await screenshot('settings.png')
-      await click('Cancel')
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
       await until(
         async () => await evaluate("!document.querySelector('dialog')"),
-        'cancel settings'
+        'Escape cancels settings'
       )
       assert.equal(
         await evaluate('getComputedStyle(document.documentElement).colorScheme'),
