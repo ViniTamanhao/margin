@@ -19,7 +19,7 @@ links are excluded. The last workspace is restored on startup if it is accessibl
 
 - **Ctrl/Cmd+Shift+O:** Open Folder.
 - **Ctrl/Cmd+B:** expand/collapse Files; opening a file collapses the panel.
-- **Ctrl/Cmd+,:** appearance settings.
+- **Ctrl/Cmd+,:** Settings.
 - **Escape:** close Files or cancel appearance changes and restore focus.
 - **Tab, Up/Down, Home/End, Enter:** navigate and open files in the temporary list.
 - **Ctrl/Cmd+S:** flush pending saves.
@@ -34,24 +34,31 @@ the window open.
 ## Appearance and Markdown presentation
 
 Margin Dark is the default; Margin Light is available in Settings → Appearance.
-The editor defaults to the system sans-serif font stack in both themes. Saved custom
-fonts remain intact; the exact older default serif stack migrates to the new default.
-Font family, font size (12–32 px) and seven semantic colors update the UI in a live preview.
-Settings uses a category rail and a separate Appearance section, with Theme,
-Typography and Colors groups. Its content scrolls in smaller windows while the
-header and save controls remain accessible. Choose **Done** to save; Cancel/Escape
-restores the saved appearance. Custom colors override either theme until **Reset colors to theme** clears them. Installed fonts
-and normal CSS font fallback lists are supported.
+The editor defaults to the system sans-serif font stack in both themes. Legacy
+unversioned files migrate the exact former default serif stack to system sans.
+Versioned settings preserve every valid font choice, including that serif stack.
+Font family, font size (12–32 px) and seven semantic colors update the UI in a
+live preview. Settings uses a category rail and a separate Appearance section,
+with Theme, Typography and Colors groups, native theme radios and labeled color
+swatches. Its content scrolls in smaller windows while the header and save
+controls remain accessible. Choose **Done** to save; Cancel/Escape restores the
+saved appearance. Custom colors override either theme until **Reset colors to
+theme** clears them. Installed fonts and normal CSS font fallback lists are
+supported.
 
 Files expands into a real grid column beside the editor with a short transition,
 then collapses after opening a file or using Escape/Ctrl/Cmd+B. It resizes the
-writing surface and supports reduced motion. The top bar keeps only the folder
-action; workspace context is available in its tooltip.
+writing surface and supports reduced motion. The top bar shows a quiet document
+basename (full relative path in its tooltip), a small M when idle, and the
+folder action. Only Unsaved/Saving states use status space; Saved disappears.
+Conflict and error feedback remains in the writing pane.
 
 Validated settings are stored in Electron's `userData/appearance.json`, separate
-from workspace state and Markdown files. Writes are serialized and staged before
-rename. Missing, invalid or unreadable settings fall back to Margin Dark.
-
+from workspace state and Markdown files. New saves use `{ version: 1, appearance
+}`. Legacy files load through a single explicit migration boundary and become
+versioned on their next save. Unsupported versions and invalid values fall back
+safely. Writes are serialized and staged before rename. Missing, invalid or
+unreadable settings fall back to Margin Dark.
 CodeMirror viewport decorations hide ATX heading markers, single-line bold/italic
 markers and inline-code backticks outside the active construct. Any touching cursor
 or selection reveals its source syntax, including selections crossing constructs

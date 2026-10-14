@@ -126,6 +126,18 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
   return (
     <main className="app-shell">
       <header className="app-header">
+        {editor.path ? (
+          <span className="document-name" title={editor.path}>
+            {editor.path.slice(editor.path.lastIndexOf('/') + 1)}
+          </span>
+        ) : (
+          <span className="app-monogram" aria-label="Margin">
+            M
+          </span>
+        )}
+        <span className="document-status" role="status">
+          {editor.status === 'dirty' ? 'Unsaved' : editor.status === 'saving' ? 'Saving…' : ''}
+        </span>
         <button
           className="icon-button"
           aria-label="Open Folder"
@@ -270,20 +282,6 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
             <p className="notice" role="alert">
               {editor.error}
             </p>
-          )}
-          {editor.path && (
-            <div className="document-heading">
-              <span>{editor.path}</span>
-              <span aria-live="polite">
-                {editor.status === 'dirty'
-                  ? 'Unsaved'
-                  : editor.status === 'saving'
-                    ? 'Saving…'
-                    : editor.status === 'saved'
-                      ? 'Saved'
-                      : ''}
-              </span>
-            </div>
           )}
           <div className={editor.path ? 'editor-host' : 'editor-host hidden'}>
             <EditorSurface controller={controller} activePath={editor.path} />

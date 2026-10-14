@@ -59,7 +59,8 @@ async function run() {
       )
     }
     const text = () => evaluate("document.querySelector('.cm-content')?.textContent ?? ''")
-    const heading = () => evaluate("document.querySelector('.document-heading')?.textContent ?? ''")
+    const heading = () =>
+      evaluate("document.querySelector('.document-name')?.getAttribute('title') ?? ''")
     await until(async () => {
       try {
         return await evaluate("Boolean(document.querySelector('.app-header'))")
@@ -102,7 +103,7 @@ async function run() {
         await evaluate(
           "getComputedStyle(document.documentElement).getPropertyValue('--editor-font-family').trim()"
         ),
-        'Georgia, serif'
+        "'Iowan Old Style', 'Palatino Linotype', Georgia, serif"
       )
       assert.equal(
         await evaluate(
@@ -126,8 +127,8 @@ async function run() {
       )
       assert.equal(
         await evaluate("document.querySelector('.app-header').textContent.trim()"),
-        '',
-        'top bar contains only icon controls'
+        'M',
+        'top bar shows only the small identity mark when no document is open'
       )
       await click('Open Folder')
       await until(
@@ -189,6 +190,21 @@ async function run() {
       window.webContents.sendInputEvent({ type: 'char', keyCode: '\r' })
       window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
       await until(async () => (await heading()).includes('nested/b.md'), 'file opens from keyboard')
+      assert.equal(
+        await evaluate("document.querySelector('.document-name').textContent"),
+        'b.md',
+        'header shows only basename'
+      )
+      assert.equal(
+        await evaluate("document.querySelector('.document-name').title"),
+        'nested/b.md',
+        'relative path remains discoverable'
+      )
+      assert.equal(
+        await evaluate("document.querySelector('.document-heading') === null"),
+        true,
+        'no duplicate editor heading'
+      )
       assert.equal(
         await evaluate("document.querySelector('.file-list').inert"),
         true,
@@ -278,6 +294,12 @@ async function run() {
       )
       await window.webContents.insertText('Autosaved')
       await until(async () => (await text()).includes('Autosaved'), 'typing enters editor')
+      assert.ok(
+        await evaluate(
+          "['Unsaved', 'Saving…'].includes(document.querySelector('.document-status').textContent)"
+        ),
+        'pending edits show transient status'
+      )
       await until(
         async () => (await readFile(join(root, 'workspace/a.md'), 'utf8')).includes('Autosaved'),
         'debounced save'
@@ -311,7 +333,10 @@ async function run() {
         selection,
         'selection restored'
       )
-      await until(async () => (await heading()).includes('Saved'), 'save settled')
+      await until(
+        async () => await evaluate("document.querySelector('.document-status').textContent === ''"),
+        'save status disappears'
+      )
       await writeFile(join(root, 'workspace/a.md'), 'Clean external change')
       await until(async () => (await text()) === 'Clean external change', 'clean external reload')
       await window.webContents.insertText(' local edits')
@@ -338,7 +363,10 @@ async function run() {
         async () => (await readFile(join(root, 'workspace/a.md'), 'utf8')) === local,
         'explicit local version saved'
       )
-      await until(async () => (await heading()).includes('Saved'), 'save settled')
+      await until(
+        async () => await evaluate("document.querySelector('.document-status').textContent === ''"),
+        'save status disappears'
+      )
       await window.webContents.insertText(' recovered')
       await writeFile(join(root, 'workspace/a.md'), 'Third external conflict')
       await until(
@@ -410,7 +438,9 @@ async function run() {
       )
       await screenshot('settings-narrow.png')
       window.setBounds(originalBounds)
-      await evaluate("document.querySelector('dialog input[name=theme][value=light]').click()")
+      await evaluate("document.querySelector('dialog input[name=theme][value=dark]').focus()")
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Right' })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Right' })
       await until(
         async () =>
           await evaluate("getComputedStyle(document.documentElement).colorScheme === 'light'"),
@@ -468,6 +498,17 @@ async function run() {
       assert.equal(appearance.fontFamily, 'Georgia, serif')
       assert.equal(appearance.colors.accent, '#536a5a')
       await screenshot('light.png')
+      const intentionalSerif = "'Iowan Old Style', 'Palatino Linotype', Georgia, serif"
+      await click('Settings')
+      await setInput('dialog input:not([type])', intentionalSerif)
+      await click('Done')
+      await until(
+        async () => await evaluate("!document.querySelector('dialog')"),
+        'intentional former-default font saved'
+      )
+      const savedSerif = JSON.parse(await readFile(join(root, 'app-data/appearance.json'), 'utf8'))
+      assert.equal(savedSerif.version, 1)
+      assert.equal(savedSerif.appearance.fontFamily, intentionalSerif)
       await evaluate("document.querySelector('.cm-content').focus()")
       await window.webContents.insertText(' flush before close')
       await evaluate(
