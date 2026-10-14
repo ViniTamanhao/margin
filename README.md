@@ -76,6 +76,11 @@ pnpm build
 pnpm test:smoke
 ```
 
+GitHub Actions runs frozen-lockfile installation, type checking, linting, unit tests
+and the production build on pull requests and pushes to `main` and `develop`, using
+Node 24 and pnpm 12 as configured in `mise.toml`. The desktop smoke test remains a
+local validation.
+
 `test:smoke` requires a desktop display and a current production build. It launches the
 real Electron application against temporary files, substitutes deterministic native
 dialog results, and checks editing, saving, conflicts, keyboard navigation, window
