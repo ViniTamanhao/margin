@@ -1,12 +1,13 @@
 :root {
-  --margin-bg: #faf9f6;
-  --margin-surface: #f2f1ed;
-  --margin-text: #272923;
-  --margin-text-muted: #73766b;
-  --margin-border: #dfdfd7;
-  --margin-accent: #466651;
-  --margin-selection: #dce7dc;
-  --margin-error: #a13e35;
+  color-scheme: dark;
+  --margin-bg: #1c1e20;
+  --margin-surface: #242729;
+  --margin-text: #e0e2df;
+  --margin-text-muted: #9ca39e;
+  --margin-border: #3b4140;
+  --margin-accent: #a0c4ac;
+  --margin-selection: #364c40;
+  --margin-error: #eea49c;
   --editor-font-family: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
   --editor-font-size: 18px;
   --editor-line-height: 1.75;
@@ -34,7 +35,9 @@ button {
   color: inherit;
   cursor: pointer;
 }
-button:focus-visible {
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
   outline: 2px solid var(--margin-accent);
   outline-offset: 2px;
 }

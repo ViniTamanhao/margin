@@ -2,9 +2,14 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import type { Workspace } from '../../shared/api'
 import { EditorController } from './editor/controller'
 import { EditorSurface } from './editor/EditorSurface'
+import type { AppearanceSettings } from '../../shared/appearance'
+import { applyAppearance } from './appearance'
+import { AppearanceDialog } from './components/AppearanceDialog'
 import { Icon } from './components/Icon'
 
-function App(): React.JSX.Element {
+function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): React.JSX.Element {
+  const [appearance, setAppearance] = useState(initialAppearance)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [controller] = useState(() => new EditorController(window.margin.document))
   const editor = useSyncExternalStore(controller.subscribe, controller.snapshot)
@@ -76,6 +81,12 @@ function App(): React.JSX.Element {
   }, [filesExpanded])
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {
+      if (settingsOpen) return
+      if ((event.metaKey || event.ctrlKey) && event.key === ',') {
+        event.preventDefault()
+        setFilesExpanded(false)
+        setSettingsOpen(true)
+      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'b') {
         event.preventDefault()
         setFilesExpanded((expanded) => !expanded)
@@ -101,7 +112,7 @@ function App(): React.JSX.Element {
       window.removeEventListener('keydown', keydown)
       window.removeEventListener('focus', focus)
     }
-  }, [busy, editor.locked, controller, openFolder, filesExpanded])
+  }, [busy, editor.locked, controller, openFolder, filesExpanded, settingsOpen])
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -144,6 +155,17 @@ function App(): React.JSX.Element {
             }}
           >
             <Icon name="files" />
+          </button>
+          <button
+            className="icon-button settings-toggle"
+            aria-label="Appearance settings"
+            title="Appearance (Ctrl/Cmd+,)"
+            onClick={() => {
+              setFilesExpanded(false)
+              setSettingsOpen(true)
+            }}
+          >
+            <Icon name="settings" />
           </button>
         </aside>
         {workspace && (
@@ -195,7 +217,11 @@ function App(): React.JSX.Element {
             ))}
           </nav>
         )}
-        <section className="writing-pane" aria-label="Writing surface">
+        <section
+          className="writing-pane"
+          aria-label="Writing surface"
+          onPointerDown={() => setFilesExpanded(false)}
+        >
           {editor.status === 'error' && (
             <button className="inline-action" onClick={() => void controller.flush()}>
               Retry save
@@ -267,6 +293,16 @@ function App(): React.JSX.Element {
           )}
         </section>
       </div>
+      {settingsOpen && (
+        <AppearanceDialog
+          settings={appearance}
+          onSaved={(next) => {
+            setAppearance(next)
+            applyAppearance(next)
+          }}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
     </main>
   )
 }

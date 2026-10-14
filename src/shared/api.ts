@@ -1,5 +1,9 @@
+import type { AppearanceSettings } from './appearance'
+
 export const channels = {
   appInfo: 'app:info',
+  appearanceRead: 'appearance:read',
+  appearanceSave: 'appearance:save',
   workspaceOpen: 'workspace:open',
   workspaceCurrent: 'workspace:current',
   documentRead: 'document:read',
@@ -40,6 +44,10 @@ export type SaveResult =
   | { kind: 'missing' }
 export interface MarginAPI {
   app: { info(): Promise<AppInfo> }
+  appearance: {
+    read(): Promise<AppearanceSettings>
+    save(settings: AppearanceSettings): Promise<void>
+  }
   window: {
     onClosing(callback: () => void): () => void
     confirmClose(saved: boolean): Promise<void>
