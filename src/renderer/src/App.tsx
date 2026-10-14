@@ -185,6 +185,11 @@ function App(): React.JSX.Element {
               <button onClick={() => controller.closeUnavailable()}>Close if unchanged</button>
             </div>
           )}
+          {editor.openError && (
+            <p className="notice" role="alert">
+              {editor.openError}
+            </p>
+          )}
           {editor.error && (
             <p className="notice" role="alert">
               {editor.error}
@@ -200,9 +205,7 @@ function App(): React.JSX.Element {
                     ? 'Saving…'
                     : editor.status === 'saved'
                       ? 'Saved'
-                      : editor.status === 'loading'
-                        ? 'Opening…'
-                        : ''}
+                      : ''}
               </span>
             </div>
           )}

@@ -18,8 +18,9 @@ interface EditorSession {
 export interface EditorPresentation {
   path: string | null
   locked: boolean
-  status: DocumentStatus | 'idle' | 'loading'
+  status: DocumentStatus | 'idle'
   error: string
+  openError: string
 }
 
 // CodeMirror owns documents, selections and history; React only subscribes to presentation.
@@ -34,6 +35,7 @@ export class EditorController {
     path: null,
     status: 'idle',
     error: '',
+    openError: '',
     locked: false
   }
 
@@ -53,7 +55,8 @@ export class EditorController {
       next.locked === this.presentation.locked &&
       next.path === this.presentation.path &&
       next.status === this.presentation.status &&
-      next.error === this.presentation.error
+      next.error === this.presentation.error &&
+      next.openError === this.presentation.openError
     )
       return
     this.presentation = next
@@ -123,8 +126,6 @@ export class EditorController {
   async open(path: string): Promise<void> {
     const generation = ++this.generation
     const previous = this.presentation.path
-    if (previous) void this.save(previous)
-    this.present({ status: 'loading', error: '' })
     try {
       let session = this.sessions.get(path)
       if (!session) {
@@ -141,15 +142,17 @@ export class EditorController {
         this.sessions.set(path, session)
       }
       if (generation !== this.generation) return
-      this.present({ path, status: session.status, error: session.error })
+      // Commit the switch only after the target is available. Open failures are
+      // independent of the active session's save/conflict status.
+      this.present({ path, status: session.status, error: session.error, openError: '' })
       this.view?.setState(session.state)
       this.view?.focus()
+      if (previous) void this.save(previous)
       void this.refresh([path])
     } catch {
       if (generation === this.generation)
         this.present({
-          status: 'error',
-          error: 'Could not open this file. It may have moved or been deleted.'
+          openError: `Could not open “${path}”. It may have moved, been deleted, or become unreadable.`
         })
     }
   }
@@ -365,7 +368,7 @@ export class EditorController {
     clearTimeout(session?.timer)
     this.sessions.delete(path)
     this.generation++
-    this.present({ path: null, status: 'idle', error: '' })
+    this.present({ path: null, status: 'idle', error: '', openError: '' })
     this.view?.setState(this.state(''))
   }
 
@@ -373,7 +376,7 @@ export class EditorController {
     this.generation++
     for (const session of this.sessions.values()) clearTimeout(session.timer)
     this.sessions.clear()
-    this.present({ path: null, status: 'idle', error: '' })
+    this.present({ path: null, status: 'idle', error: '', openError: '' })
     this.view?.setState(this.state(''))
   }
 }
