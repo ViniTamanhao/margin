@@ -148,17 +148,30 @@ async function run() {
         'Toggle files',
         'Escape restores rail focus'
       )
+      await until(
+        async () =>
+          await evaluate("document.querySelector('.file-panel').getBoundingClientRect().width < 1"),
+        'collapse animation completes'
+      )
       const editorBounds = await evaluate(
         "document.querySelector('.writing-pane').getBoundingClientRect().x"
       )
       await click('Toggle files')
-      await sleep(160)
-      assert.equal(await evaluate("document.querySelector('.file-list').inert"), false)
-      assert.equal(
-        await evaluate("document.querySelector('.writing-pane').getBoundingClientRect().x"),
-        editorBounds,
-        'rail expansion does not move document'
+      await until(
+        async () =>
+          await evaluate(
+            "document.querySelector('.file-panel').getBoundingClientRect().width > 100"
+          ),
+        'expansion completes'
       )
+      assert.equal(await evaluate("document.querySelector('.file-list').inert"), false)
+      const layout = await evaluate(`(() => {
+        const files = document.querySelector('.file-panel').getBoundingClientRect();
+        const editor = document.querySelector('.writing-pane').getBoundingClientRect();
+        return { filesRight: files.right, editorLeft: editor.left, editorWidth: editor.width };
+      })()`)
+      assert.ok(layout.editorLeft > editorBounds, 'expanding files moves the editor')
+      assert.ok(Math.abs(layout.filesRight - layout.editorLeft) < 1, 'files never cover the editor')
       await screenshot('files.png')
       await evaluate("document.querySelector('.file-list button').focus()")
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Down' })
@@ -178,6 +191,33 @@ async function run() {
       )
       await click('a.md')
       await until(async () => (await text()).includes('# Original'), 'document opens')
+      await sleep(160)
+      assert.equal(
+        await evaluate("document.querySelector('.writing-pane').getBoundingClientRect().x"),
+        editorBounds,
+        'collapse restores editor layout'
+      )
+      await click('Toggle files')
+      await screenshot('editor-files.png')
+      const originalBounds = window.getBounds()
+      window.setContentSize(480, 640)
+      await sleep(200)
+      assert.ok(
+        await evaluate(
+          "document.querySelector('.writing-pane').getBoundingClientRect().width >= 240"
+        ),
+        'editor stays usable at narrow widths'
+      )
+      assert.equal(
+        await evaluate(
+          "document.querySelector('.workspace-body').scrollWidth <= document.querySelector('.workspace-body').clientWidth"
+        ),
+        true,
+        'narrow shell has no horizontal overflow'
+      )
+      await screenshot('editor-files-narrow.png')
+      window.setBounds(originalBounds)
+      await click('Toggle files')
       const markdown = '## Heading\n\n**bold** *italic* `code`\n\nTail\n'
       await writeFile(join(root, 'workspace/a.md'), markdown)
       await until(async () => (await text()).includes('Heading'), 'presentation fixture loaded')
@@ -343,6 +383,28 @@ async function run() {
         'intentional settings surface'
       )
       await screenshot('settings-dark.png')
+      await evaluate(
+        "Array.from(document.querySelectorAll('dialog button')).find(button => button.textContent === 'Done').focus()"
+      )
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Tab' })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Tab' })
+      await sleep(100)
+      assert.equal(
+        await evaluate("document.querySelector('dialog').contains(document.activeElement)"),
+        true,
+        'modal traps keyboard focus'
+      )
+      window.setContentSize(480, 640)
+      await sleep(200)
+      assert.equal(
+        await evaluate(
+          "document.querySelector('.settings-content').scrollWidth <= document.querySelector('.settings-content').clientWidth"
+        ),
+        true,
+        'settings content fits narrow windows'
+      )
+      await screenshot('settings-narrow.png')
+      window.setBounds(originalBounds)
       await evaluate(`(() => {
         const theme = document.querySelector('dialog select');
         theme.value = 'light'; theme.dispatchEvent(new Event('change', { bubbles: true }));

@@ -150,7 +150,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           {warning}
         </p>
       ))}
-      <div className="workspace-body">
+      <div className={`workspace-body ${filesExpanded ? 'files-expanded' : ''}`}>
         <aside className="navigation-rail" aria-label="Workspace controls">
           <button
             ref={filesToggle}
@@ -173,60 +173,61 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
             <Icon name="settings" />
           </button>
         </aside>
-        {workspace && (
-          <nav
-            ref={filesPanel}
-            id="workspace-files"
-            className={`file-list ${filesExpanded ? 'expanded' : ''}`}
-            inert={!filesExpanded}
-            aria-label="Markdown files"
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
+        <div className="file-panel">
+          {workspace && (
+            <nav
+              ref={filesPanel}
+              id="workspace-files"
+              className={`file-list ${filesExpanded ? 'expanded' : ''}`}
+              inert={!filesExpanded}
+              aria-label="Markdown files"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  setFilesExpanded(false)
+                  filesToggle.current?.focus()
+                  return
+                }
+                const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End']
+                if (!keys.includes(event.key)) return
+                const buttons = [...event.currentTarget.querySelectorAll('button')]
+                const current = buttons.indexOf(document.activeElement as HTMLButtonElement)
+                const next =
+                  event.key === 'Home'
+                    ? 0
+                    : event.key === 'End'
+                      ? buttons.length - 1
+                      : Math.max(
+                          0,
+                          Math.min(
+                            buttons.length - 1,
+                            current + (event.key === 'ArrowDown' ? 1 : -1)
+                          )
+                        )
                 event.preventDefault()
-                setFilesExpanded(false)
-                filesToggle.current?.focus()
-                return
-              }
-              const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End']
-              if (!keys.includes(event.key)) return
-              const buttons = [...event.currentTarget.querySelectorAll('button')]
-              const current = buttons.indexOf(document.activeElement as HTMLButtonElement)
-              const next =
-                event.key === 'Home'
-                  ? 0
-                  : event.key === 'End'
-                    ? buttons.length - 1
-                    : Math.max(
-                        0,
-                        Math.min(buttons.length - 1, current + (event.key === 'ArrowDown' ? 1 : -1))
-                      )
-              event.preventDefault()
-              buttons[next]?.focus()
-            }}
-          >
-            {workspace.files.length === 0 && <p>No Markdown files.</p>}
-            {workspace.files.map((path) => (
-              <button
-                key={path}
-                disabled={busy || editor.locked}
-                aria-current={editor.path === path ? 'page' : undefined}
-                className={editor.path === path ? 'active' : ''}
-                onClick={() => {
-                  void controller.open(path).then(() => {
-                    if (controller.snapshot().path === path) setFilesExpanded(false)
-                  })
-                }}
-              >
-                {path}
-              </button>
-            ))}
-          </nav>
-        )}
-        <section
-          className="writing-pane"
-          aria-label="Writing surface"
-          onPointerDown={() => setFilesExpanded(false)}
-        >
+                buttons[next]?.focus()
+              }}
+            >
+              {workspace.files.length === 0 && <p>No Markdown files.</p>}
+              {workspace.files.map((path) => (
+                <button
+                  key={path}
+                  disabled={busy || editor.locked}
+                  aria-current={editor.path === path ? 'page' : undefined}
+                  className={editor.path === path ? 'active' : ''}
+                  onClick={() => {
+                    void controller.open(path).then(() => {
+                      if (controller.snapshot().path === path) setFilesExpanded(false)
+                    })
+                  }}
+                >
+                  {path}
+                </button>
+              ))}
+            </nav>
+          )}
+        </div>
+        <section className="writing-pane" aria-label="Writing surface">
           {editor.status === 'error' && (
             <button className="inline-action" onClick={() => void controller.flush()}>
               Retry save
