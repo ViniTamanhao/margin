@@ -87,7 +87,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           else filesToggle.current?.focus()
         }
       }
-      if (id === 'appearance.open') {
+      if (id === 'settings.open') {
         setFilesExpanded(false)
         setSettingsOpen(true)
       }
@@ -166,9 +166,9 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           </button>
           <button
             className="icon-button settings-toggle"
-            aria-label="Appearance settings"
-            title={commandTooltip('appearance.open')}
-            onClick={() => executeCommand('appearance.open')}
+            aria-label="Settings"
+            title={commandTooltip('settings.open')}
+            onClick={() => executeCommand('settings.open')}
           >
             <Icon name="settings" />
           </button>

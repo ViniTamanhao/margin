@@ -69,7 +69,7 @@ export function SettingsDialog({
         <h2 id="settings-title">Settings</h2>
         <button
           className="icon-button"
-          aria-label="Cancel appearance changes"
+          aria-label="Cancel Settings changes"
           title="Cancel (Escape)"
           disabled={saving}
           onClick={cancel}

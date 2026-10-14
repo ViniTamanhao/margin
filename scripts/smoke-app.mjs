@@ -436,7 +436,7 @@ async function run() {
         true,
         'settings restore editor focus'
       )
-      await click('Appearance settings')
+      await click('Settings')
       await evaluate(`(() => {
         const theme = document.querySelector('dialog select');
         theme.value = 'light'; theme.dispatchEvent(new Event('change', { bubbles: true }));

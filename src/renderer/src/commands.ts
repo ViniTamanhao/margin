@@ -3,7 +3,7 @@
 export const shellCommands = {
   'workspace.open': { title: 'Open Folder', shortcut: 'Ctrl/Cmd+Shift+O', key: 'o', shift: true },
   'workspace.toggle-files': { title: 'Files', shortcut: 'Ctrl/Cmd+B', key: 'b', shift: false },
-  'appearance.open': { title: 'Appearance', shortcut: 'Ctrl/Cmd+,', key: ',', shift: false }
+  'settings.open': { title: 'Settings', shortcut: 'Ctrl/Cmd+,', key: ',', shift: false }
 } as const
 export type ShellCommandId = keyof typeof shellCommands
 export function shellCommandForKey(event: KeyboardEvent): ShellCommandId | undefined {
