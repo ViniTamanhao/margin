@@ -410,10 +410,7 @@ async function run() {
       )
       await screenshot('settings-narrow.png')
       window.setBounds(originalBounds)
-      await evaluate(`(() => {
-        const theme = document.querySelector('dialog select');
-        theme.value = 'light'; theme.dispatchEvent(new Event('change', { bubbles: true }));
-      })()`)
+      await evaluate("document.querySelector('dialog input[name=theme][value=light]').click()")
       await until(
         async () =>
           await evaluate("getComputedStyle(document.documentElement).colorScheme === 'light'"),
@@ -437,10 +434,7 @@ async function run() {
         'settings restore editor focus'
       )
       await click('Settings')
-      await evaluate(`(() => {
-        const theme = document.querySelector('dialog select');
-        theme.value = 'light'; theme.dispatchEvent(new Event('change', { bubbles: true }));
-      })()`)
+      await evaluate("document.querySelector('dialog input[name=theme][value=light]').click()")
       async function setInput(selector, value) {
         await evaluate(`(() => {
           const input = document.querySelector(${JSON.stringify(selector)});

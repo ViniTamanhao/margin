@@ -90,7 +90,10 @@ export function SettingsDialog({
             </button>
           ))}
         </nav>
-        <section className="settings-content" aria-labelledby="settings-section-title">
+        <section
+          className="settings-content"
+          aria-label={settingsSections.find((section) => section.id === activeSection)?.title}
+        >
           {activeSection === 'appearance' && (
             <AppearanceSection draft={draft} saving={saving} onChange={change} />
           )}
