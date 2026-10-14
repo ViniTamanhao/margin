@@ -268,7 +268,10 @@ export class EditorController {
           )
             return
           if (snapshot.revision === session.revision) {
-            if (session.status === 'missing') {
+            if (
+              session.status === 'missing' ||
+              (session.status === 'conflict' && !session.state.doc.eq(session.savedDoc))
+            ) {
               session.status = session.state.doc.eq(session.savedDoc) ? 'saved' : 'dirty'
               session.error = ''
               this.schedule(path, session)

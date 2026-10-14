@@ -179,3 +179,46 @@ test('a stale failed open cannot replace a newer successful open presentation', 
   expect(controller.snapshot()).toBe(presentation)
   expect(views[0].state.sliceDoc()).toBe('# Third')
 })
+
+test('A → B → A clears conflict and resumes revision-checked autosave of local edits', async () => {
+  const view = views[0]
+  view.dispatch({ changes: { from: 0, insert: 'Local ' }, selection: { anchor: 4 } })
+  const state = view.state
+  api.read.mockResolvedValue({ ...original, content: 'External', revision: 'B' })
+  await controller.refresh()
+  expect(controller.snapshot().status).toBe('conflict')
+  expect(controller.snapshot().error).not.toBe('')
+  await vi.advanceTimersByTimeAsync(650)
+  expect(api.save).not.toHaveBeenCalled()
+
+  api.read.mockResolvedValue(original)
+  await controller.refresh()
+  expect(controller.snapshot()).toMatchObject({ path: 'a.md', status: 'dirty', error: '' })
+  expect(view.state).toBe(state)
+  expect(view.state.selection.main.anchor).toBe(4)
+  expect(undoDepth(view.state)).toBe(1)
+  await vi.advanceTimersByTimeAsync(649)
+  expect(api.save).not.toHaveBeenCalled()
+  await vi.advanceTimersByTimeAsync(1)
+  expect(api.save).toHaveBeenCalledExactlyOnceWith({
+    path: 'a.md',
+    content: state.sliceDoc(),
+    revision: 'A'
+  })
+  expect(controller.snapshot()).toMatchObject({ status: 'saved', error: '' })
+})
+
+test('conflict stays paused while disk differs from the known base revision', async () => {
+  const view = views[0]
+  view.dispatch({ changes: { from: 0, insert: 'Local ' } })
+  const state = view.state
+  api.read.mockResolvedValue({ ...original, content: 'External', revision: 'B' })
+  await controller.refresh()
+  api.read.mockResolvedValue({ ...original, content: 'Another external edit', revision: 'C' })
+  await controller.refresh()
+  expect(controller.snapshot().status).toBe('conflict')
+  expect(controller.snapshot().error).not.toBe('')
+  await vi.advanceTimersByTimeAsync(1300)
+  expect(api.save).not.toHaveBeenCalled()
+  expect(view.state).toBe(state)
+})
