@@ -97,7 +97,7 @@ async function run() {
         await evaluate(
           "getComputedStyle(document.documentElement).getPropertyValue('--editor-font-size').trim()"
         ),
-        '22px'
+        '18px'
       )
       assert.equal(
         await evaluate(
@@ -109,9 +109,9 @@ async function run() {
         await evaluate(
           "getComputedStyle(document.documentElement).getPropertyValue('--margin-accent').trim()"
         ),
-        '#536a5a'
+        '#555555'
       )
-      console.log('PASS workspace, theme, font and color restored after process restart')
+      console.log('PASS workspace, theme and font restored after process restart')
       window.close()
       await until(() => window.isDestroyed(), 'restored window closes')
       app.exit(0)
@@ -126,10 +126,37 @@ async function run() {
         40
       )
       assert.equal(
-        await evaluate("document.querySelector('.app-header').textContent.trim()"),
-        'M',
-        'top bar shows only the small identity mark when no document is open'
+        await evaluate("document.querySelector('.app-header .app-wordmark')?.textContent"),
+        'Margin',
+        'top bar shows the wordmark when no document is open'
       )
+      await screenshot('empty-start.png')
+      dialog.showOpenDialog = async () => ({
+        canceled: false,
+        filePaths: [join(root, 'empty-workspace')]
+      })
+      await click('Open Folder')
+      await until(
+        async () => await evaluate("Boolean(document.querySelector('.file-list-empty'))"),
+        'empty workspace message'
+      )
+      await click('Toggle files')
+      await screenshot('empty-files.png')
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+      await until(
+        async () => await evaluate("document.querySelector('.file-list').inert"),
+        'empty file list closes with Escape'
+      )
+      assert.equal(
+        await evaluate("document.activeElement.getAttribute('aria-label')"),
+        'Toggle files',
+        'empty file list restores toggle focus'
+      )
+      dialog.showOpenDialog = async () => ({
+        canceled: false,
+        filePaths: [join(root, 'workspace')]
+      })
       await click('Open Folder')
       await until(
         async () => (await evaluate('document.querySelectorAll(".file-list button").length')) === 2,
@@ -194,6 +221,11 @@ async function run() {
         await evaluate("document.querySelector('.document-name').textContent"),
         'b.md',
         'header shows only basename'
+      )
+      assert.equal(
+        await evaluate("document.querySelector('.app-header .app-wordmark')?.textContent"),
+        'Margin',
+        'top bar keeps the wordmark when a document is open'
       )
       assert.equal(
         await evaluate("document.querySelector('.document-name').title"),
@@ -346,6 +378,7 @@ async function run() {
         'dirty conflict detected'
       )
       assert.equal(await readFile(join(root, 'workspace/a.md'), 'utf8'), 'External conflict')
+      await screenshot('conflict.png')
       window.close()
       await sleep(400)
       assert.equal(window.isDestroyed(), false, 'conflict prevents closing')
@@ -404,16 +437,9 @@ async function run() {
         'Settings'
       )
       assert.equal(
-        await evaluate("document.querySelectorAll('.settings-navigation button').length"),
-        1
-      )
-      assert.equal(
-        await evaluate("document.querySelector('.settings-navigation [aria-current]').textContent"),
-        'Appearance'
-      )
-      assert.ok(
-        await evaluate("document.querySelector('dialog').getBoundingClientRect().width > 600"),
-        'intentional settings surface'
+        await evaluate("document.querySelectorAll('dialog input').length"),
+        3,
+        'settings contain only two theme radios and one font field'
       )
       await screenshot('settings-dark.png')
       await evaluate(
@@ -473,13 +499,6 @@ async function run() {
         })()`)
       }
       await setInput('dialog input:not([type])', 'Georgia, serif')
-      await setInput('dialog input[type=number]', '22')
-      await setInput('dialog input[type=color]', '#f7f6f2')
-      await evaluate(`(() => {
-        const input = document.querySelectorAll('dialog input[type=color]')[5];
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '#536a5a');
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-      })()`)
       await click('Done')
       await until(
         async () => await evaluate("!document.querySelector('dialog')"),
@@ -489,14 +508,14 @@ async function run() {
         await evaluate(
           "getComputedStyle(document.documentElement).getPropertyValue('--editor-font-size').trim()"
         ),
-        '22px'
+        '18px'
       )
       const persisted = JSON.parse(await readFile(join(root, 'app-data/appearance.json'), 'utf8'))
       assert.equal(persisted.version, 1)
       const appearance = persisted.appearance
       assert.equal(appearance.theme, 'light')
       assert.equal(appearance.fontFamily, 'Georgia, serif')
-      assert.equal(appearance.colors.accent, '#536a5a')
+      assert.deepEqual(Object.keys(appearance).sort(), ['fontFamily', 'theme'])
       await screenshot('light.png')
       const intentionalSerif = "'Iowan Old Style', 'Palatino Linotype', Georgia, serif"
       await click('Settings')

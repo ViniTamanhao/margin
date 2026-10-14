@@ -33,25 +33,29 @@ the window open.
 
 ## Appearance and Markdown presentation
 
-Margin Dark is the default; Margin Light is available in Settings → Appearance.
-The editor defaults to the system sans-serif font stack in both themes. Legacy
-unversioned files migrate the exact former default serif stack to system sans.
-Versioned settings preserve every valid font choice, including that serif stack.
-Font family, font size (12–32 px) and seven semantic colors update the UI in a
-live preview. Settings uses a category rail and a separate Appearance section,
-with Theme, Typography and Colors groups, native theme radios and labeled color
-swatches. Its content scrolls in smaller windows while the header and save
-controls remain accessible. Choose **Done** to save; Cancel/Escape restores the
-saved appearance. Custom colors override either theme until **Reset colors to
-theme** clears them. Installed fonts and normal CSS font fallback lists are
-supported.
+Settings contains only Light/Dark mode and an editor font-family field, both with
+live preview. Both themes use neutral gray surfaces, selections and focus accents.
+The editor defaults to system sans-serif at a fixed 18 px. Installed fonts and normal
+CSS font fallback lists are supported. Choose **Done** to save; Cancel/Escape restores
+the saved appearance. Old custom colors and font-size preferences are ignored and
+removed on the next save. Legacy unversioned files still migrate the exact former
+default serif stack to system sans; versioned files preserve intentional font choices.
 
 Files expands into a real grid column beside the editor with a short transition,
 then collapses after opening a file or using Escape/Ctrl/Cmd+B. It resizes the
 writing surface and supports reduced motion. The top bar shows a quiet document
-basename (full relative path in its tooltip), a small M when idle, and the
-folder action. Only Unsaved/Saving states use status space; Saved disappears.
+basename (full relative path in its tooltip), a persistent `Margin`
+wordmark on the left, and the folder action. The wordmark uses system monospace
+and follows the theme's text color.
+Only Unsaved/Saving states use status space; Saved disappears.
 Conflict and error feedback remains in the writing pane.
+
+UI styles share a small token set in `assets/base.css`: a 13 px interface font,
+12 px navigation and helper text, 32 px controls, 28 px icon buttons, the existing
+spacing scale, and 4 px control / 8 px dialog corners. File navigation uses padded
+rows. Empty messages and recovery actions have explicit spacing.
+Hover is a quieter tint than selection; selected items keep their fill while hovered,
+disabled controls do not gain hover feedback, and keyboard focus uses the accent ring.
 
 Validated settings are stored in Electron's `userData/appearance.json`, separate
 from workspace state and Markdown files. New saves use `{ version: 1, appearance

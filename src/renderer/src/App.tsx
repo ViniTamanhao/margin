@@ -126,15 +126,10 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
   return (
     <main className="app-shell">
       <header className="app-header">
-        {editor.path ? (
-          <span className="document-name" title={editor.path}>
-            {editor.path.slice(editor.path.lastIndexOf('/') + 1)}
-          </span>
-        ) : (
-          <span className="app-monogram" aria-label="Margin">
-            M
-          </span>
-        )}
+        <span className="app-wordmark">Margin</span>
+        <span className="document-name" title={editor.path ?? undefined}>
+          {editor.path ? editor.path.slice(editor.path.lastIndexOf('/') + 1) : ''}
+        </span>
         <span className="document-status" role="status">
           {editor.status === 'dirty' ? 'Unsaved' : editor.status === 'saving' ? 'Saving…' : ''}
         </span>
@@ -220,13 +215,14 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
                 buttons[next]?.focus()
               }}
             >
-              {workspace.files.length === 0 && <p>No Markdown files.</p>}
+              {workspace.files.length === 0 && (
+                <p className="file-list-empty">No Markdown files.</p>
+              )}
               {workspace.files.map((path) => (
                 <button
                   key={path}
                   disabled={busy || editor.locked}
                   aria-current={editor.path === path ? 'page' : undefined}
-                  className={editor.path === path ? 'active' : ''}
                   onClick={() => {
                     void controller.open(path).then(() => {
                       if (controller.snapshot().path === path) setFilesExpanded(false)
@@ -241,9 +237,11 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
         </div>
         <section className="writing-pane" aria-label="Writing surface">
           {editor.status === 'error' && (
-            <button className="inline-action" onClick={() => void controller.flush()}>
-              Retry save
-            </button>
+            <div className="conflict-actions">
+              <button disabled={editor.locked} onClick={() => void controller.flush()}>
+                Retry save
+              </button>
+            </div>
           )}
           {editor.status === 'conflict' && (
             <div className="conflict-actions">

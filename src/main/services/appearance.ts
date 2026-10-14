@@ -30,11 +30,11 @@ export class AppearanceService {
     try {
       const settings = parsePersistedAppearance(JSON.parse(await readFile(this.file, 'utf8')))
       if (!settings) console.warn('Invalid appearance settings; using defaults.')
-      return settings ?? { ...defaultAppearance, colors: {} }
+      return settings ?? { ...defaultAppearance }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT')
         console.warn('Could not restore appearance settings.', error)
-      return { ...defaultAppearance, colors: {} }
+      return { ...defaultAppearance }
     }
   }
   save(input: unknown): Promise<void> {

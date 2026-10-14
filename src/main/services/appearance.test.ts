@@ -5,17 +5,15 @@ import { join } from 'node:path'
 import { AppearanceService } from './appearance'
 import { defaultAppearance, parseAppearance } from '../../shared/appearance'
 
-test('validates settings, font bounds and all semantic color overrides', () => {
+test('validates the two themes and font family', () => {
   expect(parseAppearance(defaultAppearance)).toEqual(defaultAppearance)
   for (const patch of [
     { theme: 'unknown' },
-    { fontSize: 11 },
-    { fontSize: 33 },
-    { fontSize: 18.5 },
     { fontFamily: 'url(secret)' },
-    { colors: { bg: 'red' } },
-    { colors: { unknown: '#ffffff' } },
-    { colors: [] }
+    { fontFamily: '' },
+    { fontFamily: '   ' },
+    { fontFamily: 'a'.repeat(201) },
+    { fontFamily: 18 }
   ])
     expect(parseAppearance({ ...defaultAppearance, ...patch })).toBeNull()
   expect(parseAppearance(null)).toBeNull()
@@ -27,16 +25,16 @@ test('defaults to dark, serializes writes and persists independently of workspac
   try {
     expect(await service.read()).toEqual(defaultAppearance)
     const first = { ...defaultAppearance, theme: 'light' as const }
-    const last = { ...first, fontSize: 22, colors: { accent: '#123456' } }
+    const last = { ...first, fontFamily: 'Georgia, serif' }
     await Promise.all([service.save(first), service.save(last)])
     expect(await new AppearanceService(file).read()).toEqual(last)
-    await expect(service.save({ ...last, fontSize: 99 })).rejects.toThrow('Invalid')
+    await expect(service.save({ ...last, fontFamily: 'url(secret)' })).rejects.toThrow('Invalid')
     expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ version: 1, appearance: last })
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
       await writeFile(file, '{broken')
       expect(await service.read()).toEqual(defaultAppearance)
-      await writeFile(file, JSON.stringify({ ...last, colors: { bg: 'bad' } }))
+      await writeFile(file, JSON.stringify({ ...last, theme: 'unknown' }))
       expect(await service.read()).toEqual(defaultAppearance)
       expect(warn).toHaveBeenCalledTimes(2)
     } finally {
@@ -84,7 +82,7 @@ test('loads legacy fonts only through the unversioned migration boundary', async
         {},
         { version: 1 },
         { version: 2, appearance: defaultAppearance },
-        { version: 1, appearance: { ...defaultAppearance, fontSize: 99 } }
+        { version: 1, appearance: { ...defaultAppearance, fontFamily: '' } }
       ]) {
         await writeFile(file, JSON.stringify(invalid))
         expect(await service.read()).toEqual(defaultAppearance)
@@ -92,6 +90,24 @@ test('loads legacy fonts only through the unversioned migration boundary', async
     } finally {
       warn.mockRestore()
     }
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('drops obsolete font sizes and color overrides when loading and saving', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'margin-old-appearance-'))
+  const file = join(directory, 'appearance.json')
+  const service = new AppearanceService(file)
+  const expected = { theme: 'light' as const, fontFamily: 'Georgia, serif' }
+  const oldSettings = { ...expected, fontSize: 30, colors: { selection: '#00ff00' } }
+  try {
+    for (const stored of [oldSettings, { version: 1, appearance: oldSettings }]) {
+      await writeFile(file, JSON.stringify(stored))
+      expect(await service.read()).toEqual(expected)
+    }
+    await service.save(oldSettings)
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ version: 1, appearance: expected })
   } finally {
     await rm(directory, { recursive: true, force: true })
   }

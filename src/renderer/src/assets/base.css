@@ -1,12 +1,12 @@
 :root {
   color-scheme: dark;
-  --margin-bg: #1c1e20;
-  --margin-surface: #242729;
-  --margin-text: #e0e2df;
-  --margin-text-muted: #9ca39e;
-  --margin-border: #3b4140;
-  --margin-accent: #a0c4ac;
-  --margin-selection: #364c40;
+  --margin-bg: #1e1e1e;
+  --margin-surface: #262626;
+  --margin-text: #e2e2e2;
+  --margin-text-muted: #a0a0a0;
+  --margin-border: #404040;
+  --margin-accent: #bcbcbc;
+  --margin-selection: #424242;
   --margin-error: #eea49c;
   --editor-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --editor-font-size: 18px;
@@ -19,7 +19,19 @@
   --space-xl: 48px;
   --radius-sm: 4px;
   --radius-md: 8px;
+  --ui-font-size: 13px;
+  --ui-font-size-sm: 12px;
+  --ui-font-size-caption: 11px;
+  --ui-font-size-title: 15px;
+  --ui-line-height: 1.5;
+  --control-height: 32px;
+  --icon-button-size: 28px;
+  --navigation-rail-width: 40px;
+  --margin-hover: color-mix(in srgb, var(--margin-selection) 50%, transparent);
+  --focus-ring: 2px solid var(--margin-accent);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: var(--ui-font-size);
+  line-height: var(--ui-line-height);
   color: var(--margin-text);
   background: var(--margin-bg);
 }
@@ -38,6 +50,6 @@ button {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--margin-accent);
+  outline: var(--focus-ring);
   outline-offset: 2px;
 }

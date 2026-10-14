@@ -3,9 +3,6 @@ import { parseAppearance, type AppearanceSettings } from '../../../shared/appear
 import { AppearanceSection } from './AppearanceSection'
 import { applyAppearance } from '../appearance'
 import { Icon } from './Icon'
-const settingsSections = [{ id: 'appearance', title: 'Appearance' }] as const
-type SettingsSectionId = (typeof settingsSections)[number]['id']
-
 export function SettingsDialog({
   settings,
   onSaved,
@@ -17,7 +14,6 @@ export function SettingsDialog({
 }): React.JSX.Element {
   const dialog = useRef<HTMLDialogElement>(null)
   const restoreFocus = useRef<HTMLElement | null>(null)
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>('appearance')
   const [draft, setDraft] = useState(settings)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -40,7 +36,7 @@ export function SettingsDialog({
   }
   async function save(): Promise<void> {
     if (!parseAppearance(draft)) {
-      setError('Use a font family name and a font size from 12 to 32.')
+      setError('Use a valid font family name.')
       return
     }
     setSaving(true)
@@ -78,25 +74,8 @@ export function SettingsDialog({
         </button>
       </div>
       <div className="settings-body">
-        <nav className="settings-navigation" aria-label="Settings sections">
-          {settingsSections.map((section) => (
-            <button
-              key={section.id}
-              disabled={saving}
-              aria-current={activeSection === section.id ? 'page' : undefined}
-              onClick={() => setActiveSection(section.id)}
-            >
-              {section.title}
-            </button>
-          ))}
-        </nav>
-        <section
-          className="settings-content"
-          aria-label={settingsSections.find((section) => section.id === activeSection)?.title}
-        >
-          {activeSection === 'appearance' && (
-            <AppearanceSection draft={draft} saving={saving} onChange={change} />
-          )}
+        <section className="settings-content" aria-label="Appearance">
+          <AppearanceSection draft={draft} saving={saving} onChange={change} />
         </section>
       </div>
       {error && (
@@ -108,7 +87,11 @@ export function SettingsDialog({
         <button className="text-button" disabled={saving} onClick={cancel}>
           Cancel
         </button>
-        <button className="text-button" disabled={saving} onClick={() => void save()}>
+        <button
+          className="text-button text-button-primary"
+          disabled={saving}
+          onClick={() => void save()}
+        >
           {saving ? 'Saving…' : 'Done'}
         </button>
       </div>
