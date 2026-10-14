@@ -126,14 +126,14 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
   return (
     <main className="app-shell">
       <header className="app-header">
-        <span className="app-name">Margin</span>
-        <span className="workspace-name" title={workspace?.root}>
-          {workspace?.name}
-        </span>
         <button
           className="icon-button"
           aria-label="Open Folder"
-          title={commandTooltip('workspace.open')}
+          title={
+            workspace
+              ? `${commandTooltip('workspace.open')}\n${workspace.root}`
+              : commandTooltip('workspace.open')
+          }
           disabled={busy || editor.locked}
           onClick={() => executeCommand('workspace.open')}
         >

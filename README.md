@@ -33,11 +33,20 @@ the window open.
 
 ## Appearance and Markdown presentation
 
-Margin Dark is the default; Margin Light is available in Appearance. Font family,
-font size (12–32 px) and seven semantic colors update the UI in a live preview.
-Choose **Done** to save; Cancel/Escape restores the saved appearance. Custom colors
-override either theme until **Reset colors to theme** clears them. Installed fonts
+Margin Dark is the default; Margin Light is available in Settings → Appearance.
+The editor defaults to the system sans-serif font stack in both themes. Saved custom
+fonts remain intact; the exact older default serif stack migrates to the new default.
+Font family, font size (12–32 px) and seven semantic colors update the UI in a live preview.
+Settings uses a category rail and a separate Appearance section, with Theme,
+Typography and Colors groups. Its content scrolls in smaller windows while the
+header and save controls remain accessible. Choose **Done** to save; Cancel/Escape
+restores the saved appearance. Custom colors override either theme until **Reset colors to theme** clears them. Installed fonts
 and normal CSS font fallback lists are supported.
+
+Files expands into a real grid column beside the editor with a short transition,
+then collapses after opening a file or using Escape/Ctrl/Cmd+B. It resizes the
+writing surface and supports reduced motion. The top bar keeps only the folder
+action; workspace context is available in its tooltip.
 
 Validated settings are stored in Electron's `userData/appearance.json`, separate
 from workspace state and Markdown files. Writes are serialized and staged before

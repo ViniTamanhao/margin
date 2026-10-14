@@ -118,11 +118,16 @@ async function run() {
       assert.equal(await evaluate('getComputedStyle(document.documentElement).colorScheme'), 'dark')
       assert.equal(
         await evaluate("document.querySelector('.app-header').getBoundingClientRect().height"),
-        36
+        32
       )
       assert.equal(
         await evaluate("document.querySelector('.navigation-rail').getBoundingClientRect().width"),
         40
+      )
+      assert.equal(
+        await evaluate("document.querySelector('.app-header').textContent.trim()"),
+        '',
+        'top bar contains only icon controls'
       )
       await click('Open Folder')
       await until(
