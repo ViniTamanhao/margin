@@ -467,7 +467,9 @@ async function run() {
         ),
         '22px'
       )
-      const appearance = JSON.parse(await readFile(join(root, 'app-data/appearance.json'), 'utf8'))
+      const persisted = JSON.parse(await readFile(join(root, 'app-data/appearance.json'), 'utf8'))
+      assert.equal(persisted.version, 1)
+      const appearance = persisted.appearance
       assert.equal(appearance.theme, 'light')
       assert.equal(appearance.fontFamily, 'Georgia, serif')
       assert.equal(appearance.colors.accent, '#536a5a')

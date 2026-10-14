@@ -31,7 +31,7 @@ test('defaults to dark, serializes writes and persists independently of workspac
     await Promise.all([service.save(first), service.save(last)])
     expect(await new AppearanceService(file).read()).toEqual(last)
     await expect(service.save({ ...last, fontSize: 99 })).rejects.toThrow('Invalid')
-    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual(last)
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ version: 1, appearance: last })
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     try {
       await writeFile(file, '{broken')
@@ -47,18 +47,52 @@ test('defaults to dark, serializes writes and persists independently of workspac
   }
 })
 
-test('uses system sans for both themes and migrates the old default without changing custom fonts', () => {
-  for (const theme of ['dark', 'light'] as const) {
-    expect(parseAppearance({ ...defaultAppearance, theme })?.fontFamily).toContain('sans-serif')
-    expect(
-      parseAppearance({
-        ...defaultAppearance,
-        theme,
-        fontFamily: "'Iowan Old Style', 'Palatino Linotype', Georgia, serif"
-      })?.fontFamily
-    ).toBe(defaultAppearance.fontFamily)
-    expect(
-      parseAppearance({ ...defaultAppearance, theme, fontFamily: 'Georgia, serif' })?.fontFamily
-    ).toBe('Georgia, serif')
+const formerDefault = "'Iowan Old Style', 'Palatino Linotype', Georgia, serif"
+test('appearance validation preserves the exact former default as a custom font', () => {
+  expect(parseAppearance({ ...defaultAppearance, fontFamily: formerDefault })?.fontFamily).toBe(
+    formerDefault
+  )
+})
+test('loads legacy fonts only through the unversioned migration boundary', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'margin-migration-'))
+  const file = join(directory, 'appearance.json')
+  const service = new AppearanceService(file)
+  try {
+    for (const theme of ['dark', 'light'] as const) {
+      await writeFile(
+        file,
+        JSON.stringify({ ...defaultAppearance, theme, fontFamily: formerDefault })
+      )
+      expect((await service.read()).fontFamily).toBe(defaultAppearance.fontFamily)
+      await writeFile(
+        file,
+        JSON.stringify({ ...defaultAppearance, theme, fontFamily: 'Georgia, serif' })
+      )
+      expect((await service.read()).fontFamily).toBe('Georgia, serif')
+      const intentional = { ...defaultAppearance, theme, fontFamily: formerDefault }
+      await service.save(intentional)
+      expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({
+        version: 1,
+        appearance: intentional
+      })
+      expect(await new AppearanceService(file).read()).toEqual(intentional)
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      for (const invalid of [
+        null,
+        {},
+        { version: 1 },
+        { version: 2, appearance: defaultAppearance },
+        { version: 1, appearance: { ...defaultAppearance, fontSize: 99 } }
+      ]) {
+        await writeFile(file, JSON.stringify(invalid))
+        expect(await service.read()).toEqual(defaultAppearance)
+      }
+    } finally {
+      warn.mockRestore()
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true })
   }
 })

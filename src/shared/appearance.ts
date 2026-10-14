@@ -15,6 +15,10 @@ export interface AppearanceSettings {
   fontSize: number
   colors: Partial<Record<ColorKey, string>>
 }
+export interface PersistedAppearanceSettings {
+  version: 1
+  appearance: AppearanceSettings
+}
 export const defaultAppearance: AppearanceSettings = {
   theme: 'dark',
   fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
@@ -72,11 +76,5 @@ export function parseAppearance(input: unknown): AppearanceSettings | null {
       return null
     colors[key as ColorKey] = color
   }
-  // Earlier versions saved the old default with every appearance change.
-  // Adopt the modern default for that exact stack, preserving custom fonts.
-  const fontFamily =
-    value.fontFamily === "'Iowan Old Style', 'Palatino Linotype', Georgia, serif"
-      ? defaultAppearance.fontFamily
-      : value.fontFamily
-  return { theme: value.theme, fontFamily, fontSize: value.fontSize, colors }
+  return { theme: value.theme, fontFamily: value.fontFamily, fontSize: value.fontSize, colors }
 }
