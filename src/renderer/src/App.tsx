@@ -1,12 +1,22 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { Workspace } from '../../shared/api'
 import { EditorController } from './editor/controller'
 import { EditorSurface } from './editor/EditorSurface'
+import type { AppearanceSettings } from '../../shared/appearance'
+import { applyAppearance } from './appearance'
+import { SettingsDialog } from './components/SettingsDialog'
+import { commandTooltip, shellCommandForKey, type ShellCommandId } from './commands'
+import { Icon } from './components/Icon'
 
-function App(): React.JSX.Element {
+function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): React.JSX.Element {
+  const [appearance, setAppearance] = useState(initialAppearance)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [controller] = useState(() => new EditorController(window.margin.document))
   const editor = useSyncExternalStore(controller.subscribe, controller.snapshot)
+  const [filesExpanded, setFilesExpanded] = useState(false)
+  const filesToggle = useRef<HTMLButtonElement>(null)
+  const filesPanel = useRef<HTMLElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -34,9 +44,8 @@ function App(): React.JSX.Element {
     () =>
       window.margin.window.onClosing(() => {
         controller.setLocked(true)
-        void controller
-          .flush()
-          .then((saved) => {
+        void Promise.all([controller.flush(), window.margin.appearance.read()])
+          .then(([saved]) => {
             if (!saved) controller.setLocked(false)
             return window.margin.window.confirmClose(saved)
           })
@@ -66,17 +75,42 @@ function App(): React.JSX.Element {
       controller.setLocked(false)
     }
   }, [controller])
+  const executeCommand = useCallback(
+    (id: ShellCommandId): void => {
+      if (id === 'workspace.open') {
+        if (!busy && !editor.locked) void openFolder()
+      }
+      if (id === 'workspace.toggle-files' && workspace) {
+        setFilesExpanded(!filesExpanded)
+        if (filesExpanded) {
+          if (editor.path) controller.focus()
+          else filesToggle.current?.focus()
+        }
+      }
+      if (id === 'settings.open') {
+        setFilesExpanded(false)
+        setSettingsOpen(true)
+      }
+    },
+    [busy, editor.locked, editor.path, controller, filesExpanded, openFolder, workspace]
+  )
+  useEffect(() => {
+    if (filesExpanded)
+      filesPanel.current?.querySelector<HTMLButtonElement>('[aria-current], button')?.focus()
+  }, [filesExpanded])
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        event.shiftKey &&
-        event.key.toLowerCase() === 'o' &&
-        !busy &&
-        !editor.locked
-      ) {
+      if (settingsOpen || event.defaultPrevented) return
+      if (event.key === 'Escape' && filesExpanded) {
         event.preventDefault()
-        void openFolder()
+        setFilesExpanded(false)
+        filesToggle.current?.focus()
+        return
+      }
+      const command = shellCommandForKey(event)
+      if (command) {
+        event.preventDefault()
+        executeCommand(command)
       }
     }
     const focus = (): void => {
@@ -88,20 +122,29 @@ function App(): React.JSX.Element {
       window.removeEventListener('keydown', keydown)
       window.removeEventListener('focus', focus)
     }
-  }, [busy, editor.locked, controller, openFolder])
+  }, [controller, executeCommand, filesExpanded, settingsOpen])
   return (
     <main className="app-shell">
       <header className="app-header">
-        <h1>Margin</h1>
-        <span className="workspace-name" title={workspace?.root}>
-          {workspace?.name}
+        <span className="app-wordmark">Margin</span>
+        <span className="document-name" title={editor.path ?? undefined}>
+          {editor.path ? editor.path.slice(editor.path.lastIndexOf('/') + 1) : ''}
+        </span>
+        <span className="document-status" role="status">
+          {editor.status === 'dirty' ? 'Unsaved' : editor.status === 'saving' ? 'Saving…' : ''}
         </span>
         <button
-          title="Open Folder (Ctrl/Cmd+Shift+O)"
+          className="icon-button"
+          aria-label="Open Folder"
+          title={
+            workspace
+              ? `${commandTooltip('workspace.open')}\n${workspace.root}`
+              : commandTooltip('workspace.open')
+          }
           disabled={busy || editor.locked}
-          onClick={() => void openFolder()}
+          onClick={() => executeCommand('workspace.open')}
         >
-          Open Folder
+          <Icon name="folder" />
         </button>
       </header>
       {error && (
@@ -114,48 +157,91 @@ function App(): React.JSX.Element {
           {warning}
         </p>
       ))}
-      <div className="workspace-body">
-        {workspace && (
-          <nav
-            className="file-list"
-            aria-label="Markdown files"
-            onKeyDown={(event) => {
-              const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End']
-              if (!keys.includes(event.key)) return
-              const buttons = [...event.currentTarget.querySelectorAll('button')]
-              const current = buttons.indexOf(document.activeElement as HTMLButtonElement)
-              const next =
-                event.key === 'Home'
-                  ? 0
-                  : event.key === 'End'
-                    ? buttons.length - 1
-                    : Math.max(
-                        0,
-                        Math.min(buttons.length - 1, current + (event.key === 'ArrowDown' ? 1 : -1))
-                      )
-              event.preventDefault()
-              buttons[next]?.focus()
-            }}
+      <div className={`workspace-body ${filesExpanded ? 'files-expanded' : ''}`}>
+        <aside className="navigation-rail" aria-label="Workspace controls">
+          <button
+            ref={filesToggle}
+            className="icon-button"
+            aria-label="Toggle files"
+            disabled={!workspace}
+            title={commandTooltip('workspace.toggle-files')}
+            aria-expanded={filesExpanded}
+            aria-controls={workspace ? 'workspace-files' : undefined}
+            onClick={() => executeCommand('workspace.toggle-files')}
           >
-            {workspace.files.length === 0 && <p>No Markdown files.</p>}
-            {workspace.files.map((path) => (
-              <button
-                key={path}
-                disabled={busy || editor.locked}
-                aria-current={editor.path === path ? 'page' : undefined}
-                className={editor.path === path ? 'active' : ''}
-                onClick={() => void controller.open(path)}
-              >
-                {path}
-              </button>
-            ))}
-          </nav>
-        )}
+            <Icon name="files" />
+          </button>
+          <button
+            className="icon-button settings-toggle"
+            aria-label="Settings"
+            title={commandTooltip('settings.open')}
+            onClick={() => executeCommand('settings.open')}
+          >
+            <Icon name="settings" />
+          </button>
+        </aside>
+        <div className="file-panel">
+          {workspace && (
+            <nav
+              ref={filesPanel}
+              id="workspace-files"
+              className={`file-list ${filesExpanded ? 'expanded' : ''}`}
+              inert={!filesExpanded}
+              aria-label="Markdown files"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  setFilesExpanded(false)
+                  filesToggle.current?.focus()
+                  return
+                }
+                const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End']
+                if (!keys.includes(event.key)) return
+                const buttons = [...event.currentTarget.querySelectorAll('button')]
+                const current = buttons.indexOf(document.activeElement as HTMLButtonElement)
+                const next =
+                  event.key === 'Home'
+                    ? 0
+                    : event.key === 'End'
+                      ? buttons.length - 1
+                      : Math.max(
+                          0,
+                          Math.min(
+                            buttons.length - 1,
+                            current + (event.key === 'ArrowDown' ? 1 : -1)
+                          )
+                        )
+                event.preventDefault()
+                buttons[next]?.focus()
+              }}
+            >
+              {workspace.files.length === 0 && (
+                <p className="file-list-empty">No Markdown files.</p>
+              )}
+              {workspace.files.map((path) => (
+                <button
+                  key={path}
+                  disabled={busy || editor.locked}
+                  aria-current={editor.path === path ? 'page' : undefined}
+                  onClick={() => {
+                    void controller.open(path).then(() => {
+                      if (controller.snapshot().path === path) setFilesExpanded(false)
+                    })
+                  }}
+                >
+                  {path}
+                </button>
+              ))}
+            </nav>
+          )}
+        </div>
         <section className="writing-pane" aria-label="Writing surface">
           {editor.status === 'error' && (
-            <button className="inline-action" onClick={() => void controller.flush()}>
-              Retry save
-            </button>
+            <div className="conflict-actions">
+              <button disabled={editor.locked} onClick={() => void controller.flush()}>
+                Retry save
+              </button>
+            </div>
           )}
           {editor.status === 'conflict' && (
             <div className="conflict-actions">
@@ -195,30 +281,30 @@ function App(): React.JSX.Element {
               {editor.error}
             </p>
           )}
-          {editor.path && (
-            <div className="document-heading">
-              <span>{editor.path}</span>
-              <span aria-live="polite">
-                {editor.status === 'dirty'
-                  ? 'Unsaved'
-                  : editor.status === 'saving'
-                    ? 'Saving…'
-                    : editor.status === 'saved'
-                      ? 'Saved'
-                      : ''}
-              </span>
-            </div>
-          )}
           <div className={editor.path ? 'editor-host' : 'editor-host hidden'}>
             <EditorSurface controller={controller} activePath={editor.path} />
           </div>
           {!editor.path && (
             <div className="empty-state">
-              <p>{workspace ? 'Choose a Markdown file.' : 'Open a folder. Start writing.'}</p>
+              <p>
+                {workspace
+                  ? 'Open Files to choose a Markdown document.'
+                  : 'Open a folder. Start writing.'}
+              </p>
             </div>
           )}
         </section>
       </div>
+      {settingsOpen && (
+        <SettingsDialog
+          settings={appearance}
+          onSaved={(next) => {
+            setAppearance(next)
+            applyAppearance(next)
+          }}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
     </main>
   )
 }

@@ -4,11 +4,13 @@ import { channels, type MarginAPI, type Workspace, type SaveRequest } from '../s
 import { confirmWindowClose } from './window-lifecycle'
 import { WorkspaceService } from './services/workspace'
 import { AppStateService } from './services/app-state'
+import { AppearanceService } from './services/appearance'
 import { DocumentService } from './services/documents'
 
 export function registerIPC(version: string, stateFile: string): WorkspaceService {
   const workspaces = new WorkspaceService()
   const state = new AppStateService(stateFile)
+  const appearance = new AppearanceService(join(dirname(stateFile), 'appearance.json'))
   const remember = async (workspace: Workspace): Promise<void> => {
     try {
       await state.remember(workspace.root)
@@ -38,6 +40,7 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
   const documents = new DocumentService(workspaces, join(dirname(stateFile), 'recovery'))
   const api: MarginAPI = {
     app: { info: async () => ({ name: 'Margin', version }) },
+    appearance: { read: () => appearance.read(), save: (settings) => appearance.save(settings) },
     window: { onClosing: () => () => {}, confirmClose: async () => {} },
     workspace: {
       current: async () => {
@@ -80,6 +83,14 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
       throw new Error('Untrusted IPC sender.')
     }
   }
+  ipcMain.handle(channels.appearanceRead, (event) => {
+    trusted(event)
+    return appearance.read()
+  })
+  ipcMain.handle(channels.appearanceSave, (event, settings: unknown) => {
+    trusted(event)
+    return appearance.save(settings)
+  })
   ipcMain.handle(channels.appInfo, (event) => {
     trusted(event)
     return api.app.info()

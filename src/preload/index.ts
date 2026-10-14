@@ -3,6 +3,10 @@ import { channels, type MarginAPI, type WorkspaceChange } from '../shared/api'
 
 const api: MarginAPI = {
   app: { info: () => ipcRenderer.invoke(channels.appInfo) },
+  appearance: {
+    read: () => ipcRenderer.invoke(channels.appearanceRead),
+    save: (settings) => ipcRenderer.invoke(channels.appearanceSave, settings)
+  },
   window: {
     onClosing: (callback) => {
       const listener = (): void => callback()

@@ -2,7 +2,7 @@ import { Compartment, EditorSelection, EditorState, type Text } from '@codemirro
 import { EditorView, keymap, drawSelection } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
-import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
+import { contextualMarkdown } from './markdown-presentation'
 import type { MarginAPI, DocumentSnapshot } from '../../../shared/api'
 
 type DocumentStatus = 'saved' | 'dirty' | 'saving' | 'conflict' | 'missing' | 'error'
@@ -75,10 +75,10 @@ export class EditorController {
           EditorView.editable.of(!this.locked)
         ]),
         markdown(),
+        contextualMarkdown,
         history(),
         drawSelection(),
         EditorView.lineWrapping,
-        syntaxHighlighting(defaultHighlightStyle),
         ...(content.includes('\r\n') ? [EditorState.lineSeparator.of('\r\n')] : []),
         keymap.of([
           {

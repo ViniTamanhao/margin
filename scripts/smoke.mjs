@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url)
 const root = await mkdtemp(join(tmpdir(), 'margin-smoke-'))
 await mkdir(join(root, 'app-data'))
 await mkdir(join(root, 'workspace/nested'), { recursive: true })
+await mkdir(join(root, 'empty-workspace'))
 await mkdir(join(root, 'workspace/.git'))
 await writeFile(join(root, 'workspace/a.md'), '# Original\n')
 await writeFile(join(root, 'workspace/nested/b.md'), '# Second\n')
@@ -18,6 +19,7 @@ async function run(mode) {
     delete environment.ELECTRON_RUN_AS_NODE
     const child = spawn(require('electron'), ['scripts/smoke-app.mjs'], {
       env: environment,
+      timeout: 60_000,
       stdio: 'inherit'
     })
     child.on('error', reject)
