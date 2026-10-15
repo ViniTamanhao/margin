@@ -104,6 +104,20 @@ async function run() {
       )
       console.log('PASS missing previous workspace')
       app.exit(0)
+    } else if (process.env.MARGIN_SMOKE_MODE === 'files') {
+      const { runFileOperations } = await import('./smoke-files.mjs')
+      await runFileOperations({
+        window,
+        evaluate,
+        until,
+        screenshot,
+        root,
+        dialog,
+        shell: electron.shell
+      })
+      window.close()
+      await until(() => window.isDestroyed(), 'file operations window closes safely')
+      app.exit(0)
     } else if (process.env.MARGIN_SMOKE_MODE === 'restore') {
       await until(
         async () =>

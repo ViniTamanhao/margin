@@ -73,6 +73,9 @@ test('creates folders, including directories named .md, then files inside them',
     ok: false,
     error: { code: 'collision' }
   })
+  const renamed = value(await service.rename({ root, path: 'folder.md', name: 'Folder' }))
+  expect(renamed.entry).toEqual({ path: 'Folder', kind: 'directory' })
+  expect(renamed.change.workspace.files).toContain('Folder/Nested/a.md')
 })
 
 test('renames files and whole folders with nested and undisplayed contents, updates metadata immediately', async () => {
@@ -102,6 +105,13 @@ test('rename rejects collisions, non-Markdown names, traversal, symlinks and sta
   await writeFile(join(root, 'a.md'), 'A')
   await writeFile(join(root, 'b.md'), 'B')
   await symlink(join(root, 'notes'), join(root, 'link'))
+  const outside = await fixture()
+  await symlink(outside.root, join(root, 'outside'))
+  expect(await service.createFile({ root, parentPath: 'outside', name: 'escape' })).toMatchObject({
+    ok: false
+  })
+  expect(await readdir(outside.root)).toEqual([])
+
   expect(await service.rename({ root, path: 'a.md', name: 'b.md' })).toMatchObject({
     ok: false,
     error: { code: 'collision' }

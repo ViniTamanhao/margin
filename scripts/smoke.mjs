@@ -1,3 +1,4 @@
+import { build } from 'vite'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
@@ -19,6 +20,22 @@ await writeFile(
     '## Interaction with Armor\n\nArmor details.\n\n### Magical Resistance\n'
 )
 await writeFile(join(root, 'workspace/.git/ignored.md'), 'ignored')
+// Exercise the real Picker in Electron with an instrumented matcher, without
+// introducing a DOM test dependency or production-only diagnostic APIs.
+const probe = await build({
+  configFile: false,
+  logLevel: 'error',
+  esbuild: { jsx: 'automatic' },
+  define: { 'process.env.NODE_ENV': JSON.stringify('production') },
+  build: {
+    write: false,
+    minify: false,
+    lib: { entry: 'scripts/fixtures/picker-probe.tsx', formats: ['iife'], name: 'PickerProbe' }
+  }
+})
+const output = Array.isArray(probe) ? probe[0] : probe
+const chunk = output.output.find((entry) => entry.type === 'chunk')
+await writeFile(join(root, 'picker-probe.js'), chunk.code)
 async function run(mode) {
   await new Promise((resolve, reject) => {
     const environment = { ...process.env, MARGIN_SMOKE_ROOT: root, MARGIN_SMOKE_MODE: mode }
@@ -35,10 +52,16 @@ async function run(mode) {
   })
 }
 try {
-  await run('initial')
-  await run('restore')
-  await rm(join(root, 'workspace'), { recursive: true, force: true })
-  await run('missing')
+  const modes = process.env.MARGIN_SMOKE_ONLY?.split(',') ?? [
+    'initial',
+    'files',
+    'restore',
+    'missing'
+  ]
+  for (const mode of modes) {
+    if (mode === 'missing') await rm(join(root, 'workspace'), { recursive: true, force: true })
+    await run(mode)
+  }
   console.log(`Smoke artifacts: ${root}`)
 } catch (error) {
   console.error(`Smoke artifacts: ${root}`)

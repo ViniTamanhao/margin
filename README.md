@@ -28,6 +28,9 @@ links are excluded. The last workspace is restored on startup if it is accessibl
 - **Up/Down, Home/End:** move between visible folders and files.
 - **Right/Left:** expand/collapse a folder, or move to its first child/parent.
 - **Enter/Space:** toggle a folder or open a Markdown file.
+- **F2 (tree focus):** rename the selected item inline.
+- **Delete (tree focus):** Move to Trash, with confirmation.
+- **Shift+F10 / context-menu key (tree focus):** open the item's action menu.
 - **Ctrl/Cmd+S:** flush pending saves.
 - Standard CodeMirror selection, undo and redo shortcuts work in the editor.
 
@@ -45,7 +48,10 @@ The input keeps focus and exposes its selected listbox option through
 `aria-activedescendant`. Mouse movement and keyboard movement share selection.
 Native modal dialogs contain focus; cancellation restores the previously focused
 control. Activation closes the picker before opening a file, another picker or Settings.
-Only the first 100 matches are rendered. All styles consume the existing theme tokens.
+Only the first 100 matches are rendered. Matching is memoized by query and the caller's
+stable matching callback; arrow movement and hover only update selection. The three
+picker callers stabilize callbacks against their actual file, command or heading data.
+All styles consume the existing theme tokens.
 
 Quick Open searches the workspace's existing Markdown paths entirely in memory.
 Replaceable matching functions score case-insensitive subsequences, favoring word
@@ -81,6 +87,55 @@ rejected. Only heading metadata enters React state. Selecting a heading moves th
 cursor to its source start, scrolls it into view and records a return location. If
 the source changed while the picker was open, reopen it to get current targets.
 The command is available from Command Palette without assigning another shortcut.
+
+## Workspace file operations
+
+The Files panel has quiet New File/New Folder buttons and a small context menu.
+The same stable commands (`workspace.new-file`, `workspace.new-folder`,
+`workspace.rename`, `workspace.trash`) are available in Command Palette when enabled.
+New File/New Folder have no global shortcuts. F2 and Delete are handled only by
+focused tree rows, leaving normal editor and input behavior intact.
+
+The selected filesystem item is separate from the active document. Creation targets
+the selected folder, the selected file's parent, or the workspace root when the
+background is selected. Click empty tree space to select the root. New names and
+renames use an inline input: Enter confirms, Escape cancels, and validation errors
+keep editing active. File rename initially selects the stem. `notes` becomes
+`notes.md`; other file extensions are rejected. A folder's full name is editable,
+including names that end in `.md`. New files start empty and open in CodeMirror.
+New folders and renamed items are selected and revealed in the tree.
+
+Typed, asynchronous preload methods `workspace.createFile`, `createFolder`,
+`rename`, and `trash` carry a workspace root plus relative paths/names. Main validates
+request shapes; `WorkspaceFiles` validates the root's identity, every parent segment,
+actual filesystem type and names. Absolute/traversing paths, ignored directories,
+symlinks and reserved names are rejected. Exclusive file creation and `mkdir` reject
+collisions without overwriting existing paths. Rename uses the filesystem rename
+operation with collision and source-identity checks. Operations and watcher updates
+are serialized; monotonic snapshot versions reject stale renderer snapshots. Delayed
+watcher events inspect the current path rather than trusting an old event's meaning.
+Successful replies and operation notifications update the UI immediately.
+
+Before rename or Trash, `EditorController` locks editing and flushes affected cached
+documents. Conflict, missing and failed-save states block the operation. A rename
+cannot replace a different cached destination session, even if it disappeared from
+the filesystem. Prefix remapping preserves active/cached sessions, primary cursor,
+undo history, autosave timers, Back/Forward locations, recents and heading targets.
+Folder rename remaps all known descendants. Markdown links are left untouched.
+Watcher refreshes wait until session keys have been remapped or removed.
+
+Move to Trash always uses a native confirmation, defaulting to Cancel. Folder
+confirmation explicitly warns that the folder may contain files Margin does not
+display. Main revalidates the item after confirmation and uses Electron's
+`shell.trashItem`; there is no permanent-delete fallback. Trashed documents are
+removed from cached sessions and navigation only after success. Failures preserve
+the original editor state and show a useful error.
+
+As with document saves, Node's portable path APIs do not offer atomic no-replace
+rename or descriptor-relative traversal. Collision/identity checks cannot exclude
+an external program replacing a path between the final check and the OS call.
+Atomic no-clobber rename and stronger cross-process protection require a later
+native filesystem boundary; rename is not emulated as copy/create plus delete.
 
 ## Appearance and Markdown presentation
 
@@ -184,7 +239,12 @@ dialog results, and checks editing, saving, conflicts, keyboard navigation, wind
 closing, contextual syntax, Markdown clipboard behavior, appearance previews, focus
 restoration, Quick Open, palette execution, heading jumps, Back/Forward cursor
 restoration, deleted picker targets and workspace/settings restoration across
-separate processes. It leaves its temporary artifacts and screenshots in the printed path for inspection.
+separate processes. It also bundles a test-only instrumented caller of the real
+Picker to check recomputation, and runs inline creation, rename/undo/history,
+context-menu, conflict-blocking and external watcher workflows. The Trash boundary
+is replaced only in the temporary workspace and its confirmation payloads are
+checked, including the unseen-folder warning. No personal files are moved to Trash.
+It leaves its temporary artifacts and screenshots in the printed path for inspection.
 
 See [the Sessions 0–2 implementation report](docs/sessions-0-2-report.md) for decisions,
 validation, commit progression and remaining limits. Workspace content search,
