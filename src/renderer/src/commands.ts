@@ -1,4 +1,12 @@
+import { fuzzyScore, comparePaths } from './navigation/matching'
+
 export const commandDefinitions = {
+  'commands.open': {
+    title: 'Command Palette',
+    shortcut: 'Ctrl/Cmd+Shift+P',
+    key: 'p',
+    shift: true
+  },
   'workspace.quick-open': { title: 'Quick Open', shortcut: 'Ctrl/Cmd+P', key: 'p', shift: false },
   'workspace.open': { title: 'Open Folder', shortcut: 'Ctrl/Cmd+Shift+O', key: 'o', shift: true },
   'workspace.toggle-files': { title: 'Files', shortcut: 'Ctrl/Cmd+B', key: 'b', shift: false },
@@ -41,4 +49,15 @@ export function commandForKey(event: KeyboardEvent): CommandId | undefined {
 }
 export function commandTooltip(id: CommandId): string {
   return `${commandDefinitions[id].title} (${commandDefinitions[id].shortcut})`
+}
+
+export function matchCommands(query: string, commands: readonly Command[]): Command[] {
+  return commands
+    .filter((command) => command.id !== 'commands.open' && command.isEnabled())
+    .flatMap((command) => {
+      const score = fuzzyScore(query, command.title)
+      return score === null ? [] : [{ command, score }]
+    })
+    .sort((a, b) => b.score - a.score || comparePaths(a.command.title, b.command.title))
+    .map(({ command }) => command)
 }

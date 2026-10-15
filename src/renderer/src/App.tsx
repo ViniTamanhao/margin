@@ -15,11 +15,12 @@ import {
 import { Icon } from './components/Icon'
 import { FileTree } from './components/FileTree'
 import { QuickOpen } from './components/QuickOpen'
+import { CommandPalette } from './components/CommandPalette'
 
 function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): React.JSX.Element {
   const [appearance, setAppearance] = useState(initialAppearance)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [quickOpen, setQuickOpen] = useState(false)
+  const [picker, setPicker] = useState<'files' | 'commands' | null>(null)
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [controller] = useState(() => new EditorController(window.margin.document))
   const editor = useSyncExternalStore(controller.subscribe, controller.snapshot)
@@ -102,10 +103,16 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       // eslint-disable-next-line react-hooks/refs
       createCommandRegistry([
         {
+          id: 'commands.open',
+          ...commandDefinitions['commands.open'],
+          isEnabled: () => !busy && !editor.locked,
+          execute: () => setPicker('commands')
+        },
+        {
           id: 'workspace.quick-open',
           ...commandDefinitions['workspace.quick-open'],
           isEnabled: () => Boolean(workspace) && !busy && !editor.locked,
-          execute: () => setQuickOpen(true)
+          execute: () => setPicker('files')
         },
         {
           id: 'workspace.open',
@@ -145,7 +152,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
   }, [filesExpanded])
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {
-      if (settingsOpen || quickOpen || event.defaultPrevented) return
+      if (settingsOpen || picker || event.defaultPrevented) return
       if (event.key === 'Escape' && filesExpanded) {
         event.preventDefault()
         setFilesExpanded(false)
@@ -167,7 +174,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       window.removeEventListener('keydown', keydown)
       window.removeEventListener('focus', focus)
     }
-  }, [controller, executeCommand, filesExpanded, settingsOpen, quickOpen])
+  }, [controller, executeCommand, filesExpanded, settingsOpen, picker])
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -306,8 +313,15 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           )}
         </section>
       </div>
-      {quickOpen && workspace && (
-        <QuickOpen files={workspace.files} onOpen={openFile} onClose={() => setQuickOpen(false)} />
+      {picker === 'files' && workspace && (
+        <QuickOpen files={workspace.files} onOpen={openFile} onClose={() => setPicker(null)} />
+      )}
+      {picker === 'commands' && (
+        <CommandPalette
+          commands={commands.available()}
+          onExecute={executeCommand}
+          onClose={() => setPicker(null)}
+        />
       )}
       {settingsOpen && (
         <SettingsDialog

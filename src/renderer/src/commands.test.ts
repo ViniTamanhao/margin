@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest'
-import { createCommandRegistry, commandForKey } from './commands'
+import { createCommandRegistry, commandForKey, matchCommands } from './commands'
 
 test('stable lookup, availability and execution share enabled checks', async () => {
   let enabled = false
@@ -36,4 +36,20 @@ test('shortcut dispatch respects modifiers and composition on both platforms', (
   expect(commandForKey(key({ altKey: true }))).toBeUndefined()
   expect(commandForKey(key({ isComposing: true }))).toBeUndefined()
   expect(commandForKey(key({ ctrlKey: false }))).toBeUndefined()
+})
+
+test('palette fuzzy-filters enabled command titles with stable ordering', () => {
+  const commands = createCommandRegistry([
+    { id: 'workspace.open', title: 'Open Folder', isEnabled: () => false, execute: () => {} },
+    { id: 'settings.open', title: 'Settings', isEnabled: () => true, execute: () => {} },
+    { id: 'workspace.toggle-files', title: 'Files', isEnabled: () => true, execute: () => {} }
+  ])
+  expect(matchCommands('', commands.available()).map(({ id }) => id)).toEqual([
+    'workspace.toggle-files',
+    'settings.open'
+  ])
+  expect(matchCommands('stgs', commands.available()).map(({ id }) => id)).toEqual(['settings.open'])
+  expect(matchCommands('zzz', commands.available())).toEqual([])
+  expect(commandForKey(key({ key: 'p' }))).toBe('commands.open')
+  expect(commandForKey(key({ key: 'p', shiftKey: false }))).toBe('workspace.quick-open')
 })
