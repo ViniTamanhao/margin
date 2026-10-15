@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Workspace, WorkspaceChange, WorkspaceEntry } from '../../shared/api'
 import { isWithinPath, remapPath, parentPath } from '../../shared/workspace-paths'
+import { normalizeEntryName } from '../../shared/workspace-names'
 import type { EditorController } from './editor/controller'
 import type { FileTreeHandle } from './components/FileTree'
 import type { TreeEdit, TreeEditKind } from './components/tree-edit'
@@ -129,17 +130,29 @@ export function useWorkspaceFiles(controller: EditorController): {
   const commitEdit = useCallback(
     async (edit: TreeEdit, name: string): Promise<string | null> => {
       if (!workspace || busy) return 'Wait for the current operation to finish.'
+      const normalized = normalizeEntryName(
+        name,
+        edit.kind === 'new-folder' || (edit.kind === 'rename' && edit.target?.kind === 'directory')
+          ? 'directory'
+          : 'file'
+      )
+      if (!normalized.ok) return normalized.error.message
+      const destination = edit.parent ? `${edit.parent}/${normalized.value}` : normalized.value
       setBusy(true)
       setError('')
       try {
         const result =
           edit.kind === 'rename' && edit.target
-            ? await controller.changeWorkspaceItem(edit.target.path, 'rename', () =>
-                window.margin.workspace.rename({
-                  root: workspace.root,
-                  path: edit.target!.path,
-                  name
-                })
+            ? await controller.changeWorkspaceItem(
+                edit.target.path,
+                'rename',
+                () =>
+                  window.margin.workspace.rename({
+                    root: workspace.root,
+                    path: edit.target!.path,
+                    name
+                  }),
+                destination
               )
             : edit.kind === 'new-folder'
               ? await window.margin.workspace.createFolder({

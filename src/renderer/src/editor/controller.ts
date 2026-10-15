@@ -188,13 +188,30 @@ export class EditorController {
   async changeWorkspaceItem(
     path: string,
     operation: 'rename' | 'trash',
-    execute: () => Promise<WorkspaceResult<WorkspaceMutation | null>>
+    execute: () => Promise<WorkspaceResult<WorkspaceMutation | null>>,
+    destination?: string
   ): Promise<WorkspaceResult<WorkspaceMutation | null>> {
     if (this.locked)
       return {
         ok: false,
         error: { code: 'changed', message: 'Wait for the current operation to finish.' }
       }
+    if (
+      operation === 'rename' &&
+      destination &&
+      [...this.sessions.keys()].some(
+        (cached) => !isWithinPath(cached, path) && isWithinPath(cached, destination)
+      )
+    ) {
+      return {
+        ok: false,
+        error: {
+          code: 'collision',
+          message:
+            'The destination still has an open editor session. Resolve or save it before reusing this name.'
+        }
+      }
+    }
     this.setLocked(true)
     const blocked: WorkspaceResult<WorkspaceMutation | null> = {
       ok: false,

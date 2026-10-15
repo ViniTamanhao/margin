@@ -1,8 +1,9 @@
 import { lstat, realpath, open, mkdir, rename } from 'node:fs/promises'
-import { isAbsolute, resolve, extname } from 'node:path'
+import { isAbsolute, resolve } from 'node:path'
 import type { Stats } from 'node:fs'
 import type { WorkspaceEntry, WorkspaceError } from '../../shared/api'
 import { parentPath } from '../../shared/workspace-paths'
+import { normalizeEntryName } from '../../shared/workspace-names'
 
 export const ignoredDirectories = new Set(['.git', 'node_modules', '.hg', '.svn'])
 export const isMarkdown = (path: string): boolean => path.toLowerCase().endsWith('.md')
@@ -35,34 +36,9 @@ export function workspaceError(error: unknown): WorkspaceError {
 }
 
 export function validateName(name: string, markdownFile: boolean): string {
-  if (
-    !name ||
-    name !== name.trim() ||
-    name === '.' ||
-    name === '..' ||
-    /[<>:"/\\|?*]/.test(name) ||
-    [...name].some(
-      (character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127
-    ) ||
-    /[. ]$/.test(name) ||
-    /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name) ||
-    ignoredDirectories.has(name)
-  ) {
-    throw new WorkspaceFileError(
-      'invalid-name',
-      'Use a single name without path separators, reserved names, or trailing spaces/dots.'
-    )
-  }
-  if (!markdownFile) return name
-  if (name.toLowerCase() === '.md')
-    throw new WorkspaceFileError('invalid-name', 'Enter a filename before .md.')
-  const extension = extname(name)
-  if (extension && extension.toLowerCase() !== '.md')
-    throw new WorkspaceFileError(
-      'invalid-name',
-      'Margin creates Markdown files. Use a name ending in .md.'
-    )
-  return extension ? name : `${name}.md`
+  const result = normalizeEntryName(name, markdownFile ? 'file' : 'directory')
+  if (!result.ok) throw new WorkspaceFileError(result.error.code, result.error.message)
+  return result.value
 }
 
 function segments(path: string, allowRoot: boolean): string[] {
@@ -170,6 +146,9 @@ export class WorkspaceFiles {
       validateName(name, source.entry.kind === 'file')
     )
     if (path === target.path) return source.entry
+    const latest = await this.entry(path)
+    if (!sameIdentity(source.stats, latest.stats))
+      throw new WorkspaceFileError('changed', 'This item changed. Try again with its current name.')
     try {
       await lstat(target.absolute)
       throw new WorkspaceFileError('collision', 'An item with that name already exists.')
@@ -177,9 +156,6 @@ export class WorkspaceFiles {
       if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'))
         throw error
     }
-    const latest = await this.entry(path)
-    if (!sameIdentity(source.stats, latest.stats))
-      throw new WorkspaceFileError('changed', 'This item changed. Try again with its current name.')
     // Node exposes ordinary filesystem rename, not a portable no-replace syscall.
     // Serialize Margin operations and reject existing destinations immediately before it.
     await rename(latest.absolute, target.absolute)

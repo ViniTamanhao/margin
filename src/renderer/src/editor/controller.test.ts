@@ -448,3 +448,29 @@ test('Trash flushes cached descendants, closes affected active documents and pur
   await vi.advanceTimersByTimeAsync(1300)
   expect(api.save).not.toHaveBeenCalled()
 })
+
+test('rename refuses a destination with another cached session, even if absent from the tree', async () => {
+  api.read.mockImplementation(async (path) => ({ ...original, path }))
+  await controller.open('destination.md')
+  views[0].dispatch({ changes: { from: 0, insert: 'Unsaved destination ' } })
+  await controller.open('a.md')
+  const execute = vi.fn(async () => renamed('a.md', 'destination.md'))
+  const result = await controller.changeWorkspaceItem('a.md', 'rename', execute, 'destination.md')
+  expect(result).toMatchObject({ ok: false, error: { code: 'collision' } })
+  expect(execute).not.toHaveBeenCalled()
+  expect(controller.snapshot().path).toBe('a.md')
+  expect(controller.snapshot().recents).toContain('destination.md')
+})
+
+test('failed rename keeps original editor state and does not remap navigation', async () => {
+  views[0].dispatch({ selection: { anchor: 5 } })
+  const result = await controller.changeWorkspaceItem(
+    'a.md',
+    'rename',
+    async () => ({ ok: false, error: { code: 'collision', message: 'Already exists.' } }),
+    'b.md'
+  )
+  expect(result.ok).toBe(false)
+  expect(controller.location()).toEqual({ path: 'a.md', position: 5 })
+  expect(controller.snapshot().recents).toEqual(['a.md'])
+})
