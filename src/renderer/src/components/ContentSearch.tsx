@@ -48,7 +48,18 @@ export function ContentSearch({
         id: `${result.path}:${result.position}`,
         title: result.path.slice(result.path.lastIndexOf('/') + 1),
         subtitle: `${result.path}:${result.line}:${result.column}`,
-        excerpt: result.preview
+        excerpt: (
+          <>
+            {result.preview.slice(0, result.previewMatchStart)}
+            <mark>
+              {result.preview.slice(
+                result.previewMatchStart,
+                result.previewMatchStart + result.length
+              )}
+            </mark>
+            {result.preview.slice(result.previewMatchStart + result.length)}
+          </>
+        )
       })),
     [current]
   )

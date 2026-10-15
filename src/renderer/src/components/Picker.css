@@ -112,8 +112,8 @@
   color: var(--margin-text-muted);
   user-select: none;
 }
-mark {
-  background: var(--margin-selection);
+.picker mark {
+  background: var(--margin-search-match);
   color: inherit;
 }
 @media (max-width: 640px) {

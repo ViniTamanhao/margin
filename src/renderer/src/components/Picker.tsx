@@ -6,7 +6,7 @@ export interface PickerItem {
   title: string
   subtitle?: string
   detail?: string
-  excerpt?: string
+  excerpt?: React.ReactNode
 }
 interface PickerProps<T extends PickerItem> {
   label: string

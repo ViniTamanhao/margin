@@ -91,6 +91,7 @@ export interface WorkspaceSearchResult {
   position: number
   length: number
   preview: string
+  previewMatchStart: number
 }
 export interface MarginAPI {
   app: { info(): Promise<AppInfo> }
