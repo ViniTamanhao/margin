@@ -16,11 +16,12 @@ import { Icon } from './components/Icon'
 import { FileTree } from './components/FileTree'
 import { QuickOpen } from './components/QuickOpen'
 import { CommandPalette } from './components/CommandPalette'
+import { HeadingPicker } from './components/HeadingPicker'
 
 function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): React.JSX.Element {
   const [appearance, setAppearance] = useState(initialAppearance)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [picker, setPicker] = useState<'files' | 'commands' | null>(null)
+  const [picker, setPicker] = useState<'files' | 'commands' | 'headings' | null>(null)
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [controller] = useState(() => new EditorController(window.margin.document))
   const editor = useSyncExternalStore(controller.subscribe, controller.snapshot)
@@ -103,6 +104,13 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       // eslint-disable-next-line react-hooks/refs
       createCommandRegistry([
         {
+          id: 'editor.go-to-heading',
+          ...commandDefinitions['editor.go-to-heading'],
+          isEnabled: () =>
+            Boolean(editor.path) && editor.status !== 'missing' && !busy && !editor.locked,
+          execute: () => setPicker('headings')
+        },
+        {
           id: 'navigation.back',
           ...commandDefinitions['navigation.back'],
           isEnabled: () => editor.canGoBack && !busy && !editor.locked,
@@ -151,6 +159,8 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
     [
       busy,
       editor.locked,
+      editor.path,
+      editor.status,
       editor.canGoBack,
       editor.canGoForward,
       controller,
@@ -349,6 +359,9 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           onExecute={executeCommand}
           onClose={() => setPicker(null)}
         />
+      )}
+      {picker === 'headings' && (
+        <HeadingPicker controller={controller} onClose={() => setPicker(null)} />
       )}
       {settingsOpen && (
         <SettingsDialog

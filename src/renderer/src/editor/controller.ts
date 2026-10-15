@@ -3,6 +3,7 @@ import { EditorView, keymap, drawSelection } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { contextualMarkdown } from './markdown-presentation'
+import { extractHeadings, type HeadingSnapshot } from './headings'
 import {
   NavigationSession,
   type NavigationLocation,
@@ -33,6 +34,8 @@ export interface EditorPresentation {
 
 // CodeMirror owns documents, selections and history; React only subscribes to presentation.
 export class EditorController {
+  private headingVersion = 0
+  private headingSource: { path: string; doc: Text; version: number } | null = null
   private navigation = new NavigationSession()
   private sessions = new Map<string, EditorSession>()
   private view: EditorView | null = null
@@ -142,6 +145,51 @@ export class EditorController {
     const path = this.presentation.path
     const session = path ? this.sessions.get(path) : undefined
     return path && session ? { path, position: session.state.selection.main.head } : null
+  }
+
+  async headings(signal?: AbortSignal): Promise<HeadingSnapshot | null> {
+    const path = this.presentation.path
+    const session = path ? this.sessions.get(path) : undefined
+    if (!path || !session) return null
+    const source = { path, doc: session.state.doc, version: ++this.headingVersion }
+    this.headingSource = source
+    const isCancelled = (): boolean =>
+      Boolean(signal?.aborted) ||
+      this.headingSource !== source ||
+      this.presentation.path !== path ||
+      this.sessions.get(path)?.state.doc !== source.doc
+    const headings = await extractHeadings(session.state, isCancelled)
+    return headings && !isCancelled() ? { path, version: source.version, headings } : null
+  }
+
+  jumpToHeading(version: number, position: number): boolean {
+    const source = this.headingSource
+    const session = source ? this.sessions.get(source.path) : undefined
+    if (this.locked) return false
+    if (
+      !source ||
+      !session ||
+      source.version !== version ||
+      this.presentation.path !== source.path ||
+      session.state.doc !== source.doc
+    ) {
+      this.present({ openError: 'This document changed. Reopen Go to Heading.' })
+      return false
+    }
+    const previous = this.location()
+    const anchor = Math.max(0, Math.min(session.state.doc.length, Math.trunc(position)))
+    this.generation++
+    const transaction = {
+      selection: { anchor },
+      effects: EditorView.scrollIntoView(anchor, { y: 'center' })
+    }
+    if (this.view) this.view.dispatch(transaction)
+    else session.state = session.state.update(transaction).state
+    this.navigation.record(previous, { path: source.path, position: anchor })
+    this.present({ openError: '' })
+    this.presentNavigation()
+    this.focus()
+    return true
   }
 
   private presentNavigation(): void {
@@ -438,6 +486,7 @@ export class EditorController {
   }
 
   reset(): void {
+    this.headingSource = null
     this.navigation.reset()
     this.presentNavigation()
     this.generation++

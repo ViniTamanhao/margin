@@ -9,6 +9,7 @@ export interface PickerItem {
 }
 interface PickerProps<T extends PickerItem> {
   label: string
+  busy?: boolean
   emptyMessage: string
   getItems(query: string): readonly T[]
   onSelect(item: T): void
@@ -18,6 +19,7 @@ interface PickerProps<T extends PickerItem> {
 // Input retains DOM focus; aria-activedescendant exposes keyboard/mouse selection.
 export function Picker<T extends PickerItem>({
   label,
+  busy = false,
   emptyMessage,
   getItems,
   onSelect,
@@ -102,7 +104,13 @@ export function Picker<T extends PickerItem>({
           }
         }}
       />
-      <div className="picker-results" id={`${id}-results`} role="listbox" aria-label={label}>
+      <div
+        className="picker-results"
+        id={`${id}-results`}
+        role="listbox"
+        aria-label={label}
+        aria-busy={busy}
+      >
         {items.map((item, index) => (
           <div
             key={item.id}

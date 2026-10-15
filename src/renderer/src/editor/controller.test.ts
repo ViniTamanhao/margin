@@ -293,3 +293,32 @@ test('history clamps positions after external edits and preserves stacks on miss
     recents: []
   })
 })
+
+test('heading jumps use live unsaved Markdown, preserve undo and record a return location', async () => {
+  const view = views[0]
+  view.dispatch({
+    changes: { from: view.state.doc.length, insert: '\n\n## Armor\n' },
+    selection: { anchor: 4 }
+  })
+  const snapshot = await controller.headings()
+  const target = snapshot!.headings.find(({ title }) => title === 'Armor')!
+  const readCount = api.read.mock.calls.length
+  expect(controller.jumpToHeading(snapshot!.version, target.position)).toBe(true)
+  expect(controller.location()).toEqual({ path: 'a.md', position: original.content.length + 2 })
+  expect(api.read).toHaveBeenCalledTimes(readCount)
+  expect(undoDepth(view.state)).toBe(1)
+  await controller.navigate('back')
+  expect(controller.location()).toEqual({ path: 'a.md', position: 4 })
+  await controller.navigate('forward')
+  expect(controller.location()?.position).toBe(target.position)
+})
+
+test('heading jump refuses stale positions after edits or workspace reset', async () => {
+  const snapshot = await controller.headings()
+  views[0].dispatch({ changes: { from: 0, insert: 'Changed ' }, selection: { anchor: 5 } })
+  expect(controller.jumpToHeading(snapshot!.version, 0)).toBe(false)
+  expect(controller.location()?.position).toBe(5)
+  expect(controller.snapshot().openError).toContain('changed')
+  controller.reset()
+  expect(controller.jumpToHeading(snapshot!.version, 0)).toBe(false)
+})

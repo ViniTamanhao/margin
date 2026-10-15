@@ -8,6 +8,7 @@ interface CommandDefinition {
   alt?: boolean
 }
 export const commandDefinitions = {
+  'editor.go-to-heading': { title: 'Go to Heading' },
   'navigation.back': {
     title: 'Go Back',
     shortcut: 'Alt+Left',
