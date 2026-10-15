@@ -421,3 +421,40 @@ input:disabled,
 .editor-surface .cm-content ::selection {
   background: var(--margin-selection);
 }
+
+/* Line typography stays stable when contextual source markers are revealed. */
+.cm-line.cm-md-heading {
+  line-height: 1.45;
+  padding-bottom: 0.2em;
+}
+.cm-line.cm-md-h1 {
+  font-size: 1.55em;
+  font-weight: 650;
+  padding-top: 0.7em;
+}
+.cm-line.cm-md-h2 {
+  font-size: 1.35em;
+  font-weight: 650;
+  padding-top: 0.65em;
+}
+.cm-line.cm-md-h3 {
+  font-size: 1.18em;
+  font-weight: 600;
+  padding-top: 0.5em;
+}
+.cm-line.cm-md-h4 {
+  font-size: 1.08em;
+  font-weight: 600;
+  padding-top: 0.4em;
+}
+.cm-line.cm-md-h5 {
+  font-size: 1em;
+  font-weight: 600;
+  padding-top: 0.3em;
+}
+.cm-line.cm-md-h6 {
+  font-size: 0.95em;
+  font-weight: 600;
+  padding-top: 0.3em;
+  color: var(--margin-text-muted);
+}

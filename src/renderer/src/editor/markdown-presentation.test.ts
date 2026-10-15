@@ -62,3 +62,19 @@ test('a cursor in heading indentation reveals markers on that line', () => {
   expect(hiddenText(state('   ## Heading\nElsewhere', 0))).toEqual([])
   expect(hiddenText(state('   ## Heading\nElsewhere'))).toEqual(['## '])
 })
+
+test('syntax classification distinguishes all headings and excludes source lookalikes', async () => {
+  const { syntaxTree } = await import('@codemirror/language')
+  const { markdownHeadingLevel } = await import('./markdown-presentation')
+  const editor = state(
+    '# One\n## Two\n### Three\n#### Four\n##### Five\n###### Six\n\nSetext one\n===\n\nSetext two\n---\n\n```md\n# code\n```\n\\# escaped\ntext # ordinary'
+  )
+  const levels: number[] = []
+  syntaxTree(editor).iterate({
+    enter(node) {
+      const level = markdownHeadingLevel(node.name)
+      if (level) levels.push(level)
+    }
+  })
+  expect(levels).toEqual([1, 2, 3, 4, 5, 6, 1, 2])
+})

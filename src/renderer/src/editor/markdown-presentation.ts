@@ -50,6 +50,11 @@ export function hiddenMarkdownMarkers(
   return markers.sort((a, b) => a.from - b.from)
 }
 
+export function markdownHeadingLevel(name: string): number | null {
+  const match = /^(?:ATXHeading([1-6])|SetextHeading([12]))$/.exec(name)
+  return match ? Number(match[1] ?? match[2]) : null
+}
+
 function decorations(view: EditorView): DecorationSet {
   const ranges = view.visibleRanges.flatMap(({ from, to }) =>
     hiddenMarkdownMarkers(view.state, from, to)
@@ -65,8 +70,22 @@ function decorations(view: EditorView): DecorationSet {
       from,
       to,
       enter(node) {
-        const className = /^ATXHeading[1-6]$|^SetextHeading[12]$/.test(node.name)
-          ? 'cm-md-heading'
+        const level = markdownHeadingLevel(node.name)
+        if (level) {
+          for (let line = view.state.doc.lineAt(node.from); line.from <= node.to;) {
+            const id = `heading:${line.from}`
+            if (!seen.has(id)) {
+              seen.add(id)
+              styled.push(
+                Decoration.line({ class: `cm-md-heading cm-md-h${level}` }).range(line.from)
+              )
+            }
+            if (line.number === view.state.doc.lines) break
+            line = view.state.doc.line(line.number + 1)
+          }
+        }
+        const className = level
+          ? null
           : node.name === 'StrongEmphasis'
             ? 'cm-md-strong'
             : node.name === 'Emphasis'
