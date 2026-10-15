@@ -14,6 +14,7 @@ import {
 } from './commands'
 import { Icon } from './components/Icon'
 import { FileTree } from './components/FileTree'
+import { ContentSearch } from './components/ContentSearch'
 import { QuickOpen } from './components/QuickOpen'
 import { CommandPalette } from './components/CommandPalette'
 import { HeadingPicker } from './components/HeadingPicker'
@@ -22,7 +23,7 @@ import { useWorkspaceFiles } from './useWorkspaceFiles'
 function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): React.JSX.Element {
   const [appearance, setAppearance] = useState(initialAppearance)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [picker, setPicker] = useState<'files' | 'commands' | 'headings' | null>(null)
+  const [picker, setPicker] = useState<'files' | 'commands' | 'headings' | 'content' | null>(null)
   const [controller] = useState(() => new EditorController(window.margin.document))
   const editor = useSyncExternalStore(controller.subscribe, controller.snapshot)
   const [filesExpanded, setFilesExpanded] = useState(false)
@@ -142,6 +143,12 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           ...commandDefinitions['commands.open'],
           isEnabled: () => !busy && !editor.locked,
           execute: () => setPicker('commands')
+        },
+        {
+          id: 'workspace.search-content',
+          ...commandDefinitions['workspace.search-content'],
+          isEnabled: () => Boolean(workspace) && !busy && !editor.locked,
+          execute: () => setPicker('content')
         },
         {
           id: 'workspace.quick-open',
@@ -388,6 +395,17 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           recents={editor.recents}
           files={workspace.files}
           onOpen={openFile}
+          onClose={() => setPicker(null)}
+        />
+      )}
+      {picker === 'content' && workspace && (
+        <ContentSearch
+          root={workspace.root}
+          onOpen={(result) => {
+            void controller.open(result.path, result.position).then((opened) => {
+              if (opened) setFilesExpanded(false)
+            })
+          }}
           onClose={() => setPicker(null)}
         />
       )}

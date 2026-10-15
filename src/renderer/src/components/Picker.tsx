@@ -6,6 +6,7 @@ export interface PickerItem {
   title: string
   subtitle?: string
   detail?: string
+  excerpt?: string
 }
 interface PickerProps<T extends PickerItem> {
   label: string
@@ -132,6 +133,7 @@ export function Picker<T extends PickerItem>({
                 <span className="picker-option-text">
                   <span>{item.title}</span>
                   {item.subtitle && <span className="picker-subtitle">{item.subtitle}</span>}
+                  {item.excerpt && <span className="picker-excerpt">{item.excerpt}</span>}
                 </span>
                 {item.detail && <span className="picker-detail">{item.detail}</span>}
               </div>

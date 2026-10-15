@@ -34,6 +34,12 @@ export const commandDefinitions = {
     key: 'p',
     shift: true
   },
+  'workspace.search-content': {
+    title: 'Search Workspace',
+    shortcut: 'Ctrl/Cmd+Shift+F',
+    key: 'f',
+    shift: true
+  },
   'workspace.quick-open': { title: 'Quick Open', shortcut: 'Ctrl/Cmd+P', key: 'p', shift: false },
   'workspace.open': { title: 'Open Folder', shortcut: 'Ctrl/Cmd+Shift+O', key: 'o', shift: true },
   'workspace.toggle-files': { title: 'Files', shortcut: 'Ctrl/Cmd+B', key: 'b', shift: false },

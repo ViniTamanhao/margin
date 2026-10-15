@@ -474,3 +474,19 @@ test('failed rename keeps original editor state and does not remap navigation', 
   expect(controller.location()).toEqual({ path: 'a.md', position: 5 })
   expect(controller.snapshot().recents).toEqual(['a.md'])
 })
+
+test('content result navigation records and restores the previous cursor, including same-file jumps', async () => {
+  views[0].dispatch({ selection: { anchor: 4 } })
+  api.read.mockImplementation(async (path) =>
+    path === 'b.md' ? { path, content: '# B\narmor resistance', revision: 'B' } : original
+  )
+  expect(await controller.open('b.md', 8)).toBe(true)
+  expect(views[0].state.selection.main.head).toBe(8)
+  expect(controller.snapshot().recents).toEqual(['b.md', 'a.md'])
+  await controller.navigate('back')
+  expect(controller.snapshot().path).toBe('a.md')
+  expect(views[0].state.selection.main.head).toBe(4)
+  await controller.open('a.md', 9)
+  await controller.navigate('back')
+  expect(views[0].state.selection.main.head).toBe(4)
+})

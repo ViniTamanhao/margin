@@ -306,8 +306,8 @@ export class EditorController {
     })
   }
 
-  open(path: string): Promise<boolean> {
-    return this.openDocument(path, 'record')
+  open(path: string, position?: number): Promise<boolean> {
+    return this.openDocument(path, 'record', position)
   }
 
   async navigate(direction: NavigationDirection): Promise<void> {
