@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { FilePreview } from './FilePreview'
 import { Picker } from './Picker'
 import { matchFiles } from '../navigation/matching'
 
@@ -28,6 +29,7 @@ export function QuickOpen({
   return (
     <Picker
       label="Quick Open"
+      renderPreview={(item) => <FilePreview path={item?.path} />}
       emptyMessage="No matching Markdown files."
       getItems={getItems}
       onSelect={(item) => onOpen(item.path)}
