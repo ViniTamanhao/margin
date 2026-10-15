@@ -22,6 +22,7 @@ export interface Workspace {
   root: string
   name: string
   files: string[]
+  directories: string[]
   warnings: string[]
 }
 export interface WorkspaceChange {

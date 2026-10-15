@@ -13,15 +13,18 @@ pnpm install
 pnpm dev
 ```
 
-Open Folder selects a directory using the native system picker. Nested `.md` files
-appear in the temporary file list; `.git`, `node_modules`, `.hg`, `.svn` and symbolic
+Open Folder selects a directory using the native system picker. Folders (including empty folders) and nested `.md` files
+appear in a collapsible tree in the temporary Files panel; `.git`, `node_modules`, `.hg`, `.svn` and symbolic
 links are excluded. The last workspace is restored on startup if it is accessible.
 
 - **Ctrl/Cmd+Shift+O:** Open Folder.
 - **Ctrl/Cmd+B:** expand/collapse Files; opening a file collapses the panel.
 - **Ctrl/Cmd+,:** Settings.
 - **Escape:** close Files or cancel appearance changes and restore focus.
-- **Tab, Up/Down, Home/End, Enter:** navigate and open files in the temporary list.
+- **Tab:** enter or leave the file tree.
+- **Up/Down, Home/End:** move between visible folders and files.
+- **Right/Left:** expand/collapse a folder, or move to its first child/parent.
+- **Enter/Space:** toggle a folder or open a Markdown file.
 - **Ctrl/Cmd+S:** flush pending saves.
 - Standard CodeMirror selection, undo and redo shortcuts work in the editor.
 
@@ -53,7 +56,8 @@ Conflict and error feedback remains in the writing pane.
 UI styles share a small token set in `assets/base.css`: a 13 px interface font,
 12 px navigation and helper text, 32 px controls, 28 px icon buttons, the existing
 spacing scale, and 4 px control / 8 px dialog corners. File navigation uses padded
-rows. Empty messages and recovery actions have explicit spacing.
+rows with folder disclosure icons and indentation. Expansion is kept for the current
+workspace session; folder changes outside Margin update the tree. Empty messages and recovery actions have explicit spacing.
 Hover is a quieter tint than selection; selected items keep their fill while hovered,
 disabled controls do not gain hover feedback, and keyboard focus uses the accent ring.
 

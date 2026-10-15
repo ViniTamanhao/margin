@@ -7,6 +7,7 @@ import { applyAppearance } from './appearance'
 import { SettingsDialog } from './components/SettingsDialog'
 import { commandTooltip, shellCommandForKey, type ShellCommandId } from './commands'
 import { Icon } from './components/Icon'
+import { FileTree } from './components/FileTree'
 
 function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): React.JSX.Element {
   const [appearance, setAppearance] = useState(initialAppearance)
@@ -96,7 +97,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
   )
   useEffect(() => {
     if (filesExpanded)
-      filesPanel.current?.querySelector<HTMLButtonElement>('[aria-current], button')?.focus()
+      filesPanel.current?.querySelector<HTMLButtonElement>('[tabindex="0"]')?.focus()
   }, [filesExpanded])
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {
@@ -187,51 +188,20 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
               id="workspace-files"
               className={`file-list ${filesExpanded ? 'expanded' : ''}`}
               inert={!filesExpanded}
-              aria-label="Markdown files"
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  event.preventDefault()
-                  setFilesExpanded(false)
-                  filesToggle.current?.focus()
-                  return
-                }
-                const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End']
-                if (!keys.includes(event.key)) return
-                const buttons = [...event.currentTarget.querySelectorAll('button')]
-                const current = buttons.indexOf(document.activeElement as HTMLButtonElement)
-                const next =
-                  event.key === 'Home'
-                    ? 0
-                    : event.key === 'End'
-                      ? buttons.length - 1
-                      : Math.max(
-                          0,
-                          Math.min(
-                            buttons.length - 1,
-                            current + (event.key === 'ArrowDown' ? 1 : -1)
-                          )
-                        )
-                event.preventDefault()
-                buttons[next]?.focus()
-              }}
+              aria-label="Workspace files"
+              tabIndex={-1}
             >
-              {workspace.files.length === 0 && (
-                <p className="file-list-empty">No Markdown files.</p>
-              )}
-              {workspace.files.map((path) => (
-                <button
-                  key={path}
-                  disabled={busy || editor.locked}
-                  aria-current={editor.path === path ? 'page' : undefined}
-                  onClick={() => {
-                    void controller.open(path).then(() => {
-                      if (controller.snapshot().path === path) setFilesExpanded(false)
-                    })
-                  }}
-                >
-                  {path}
-                </button>
-              ))}
+              <FileTree
+                key={workspace.root}
+                workspace={workspace}
+                activePath={editor.path}
+                disabled={busy || editor.locked}
+                onOpen={(path) => {
+                  void controller.open(path).then(() => {
+                    if (controller.snapshot().path === path) setFilesExpanded(false)
+                  })
+                }}
+              />
             </nav>
           )}
         </div>

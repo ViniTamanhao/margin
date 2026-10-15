@@ -33,6 +33,7 @@ export class WorkspaceService {
     const root = await realpath(resolve(directory))
     if (!(await stat(root)).isDirectory()) throw new Error('Choose a directory as the workspace.')
     const files: string[] = []
+    const directories: string[] = []
     const warnings: string[] = []
     const scan = async (directory: string): Promise<void> => {
       let entries
@@ -46,14 +47,22 @@ export class WorkspaceService {
       for (const entry of entries) {
         const path = resolve(directory, entry.name)
         // Do not traverse symlinks: a workspace must never grant access outside its root.
-        if (entry.isDirectory() && !ignoredDirectories.has(entry.name)) await scan(path)
-        else if (entry.isFile() && isMarkdown(entry.name))
+        if (entry.isDirectory() && !ignoredDirectories.has(entry.name)) {
+          directories.push(relative(root, path).split(sep).join('/'))
+          await scan(path)
+        } else if (entry.isFile() && isMarkdown(entry.name))
           files.push(relative(root, path).split(sep).join('/'))
       }
     }
     await scan(root)
     await this.close()
-    this.workspace = { root, name: basename(root), files: files.sort(), warnings }
+    this.workspace = {
+      root,
+      name: basename(root),
+      files: files.sort(),
+      directories: directories.sort(),
+      warnings
+    }
     this.startWatching(root)
     return this.workspace
   }
@@ -74,6 +83,7 @@ export class WorkspaceService {
       awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 }
     })
     const discovered = new Set<string>()
+    const discoveredDirectories = new Set<string>()
     this.watcher = watcher
     const publish = (): void => {
       if (this.watcher !== watcher || !this.workspace) return
@@ -81,6 +91,7 @@ export class WorkspaceService {
         workspace: {
           ...this.workspace,
           files: [...this.workspace.files],
+          directories: [...this.workspace.directories],
           warnings: [...this.workspace.warnings]
         },
         changedPaths: [...this.changed]
@@ -94,6 +105,28 @@ export class WorkspaceService {
         this.workspace.warnings = ['The workspace folder was removed. Open another folder.']
         this.changed = new Set(this.workspace.files)
         this.workspace.files = []
+        this.workspace.directories = []
+      } else if (local && (event === 'addDir' || event === 'unlinkDir')) {
+        const directories = new Set(this.workspace.directories)
+        if (event === 'addDir') {
+          directories.add(local)
+          discoveredDirectories.add(local)
+        } else {
+          const within = (path: string): boolean => path === local || path.startsWith(`${local}/`)
+          for (const path of directories) {
+            if (within(path)) {
+              directories.delete(path)
+              discoveredDirectories.delete(path)
+            }
+          }
+          this.workspace.files = this.workspace.files.filter((path) => {
+            if (!within(path)) return true
+            this.changed.add(path)
+            discovered.delete(path)
+            return false
+          })
+        }
+        this.workspace.directories = [...directories].sort()
       } else if (isMarkdown(local)) {
         const files = new Set(this.workspace.files)
         if (event === 'unlink') {
@@ -120,6 +153,7 @@ export class WorkspaceService {
       if (this.watcher !== watcher || !this.workspace) return
       this.changed = new Set([...this.workspace.files, ...discovered])
       this.workspace.files = [...discovered].sort()
+      this.workspace.directories = [...discoveredDirectories].sort()
       publish()
     })
   }

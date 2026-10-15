@@ -54,8 +54,18 @@ async function run() {
           await sleep(160)
         }
       }
+      if (label.includes('/') && label.endsWith('.md')) {
+        const parts = label.split('/')
+        for (let index = 1; index < parts.length; index++) {
+          const path = parts.slice(0, index).join('/')
+          await evaluate(
+            `Array.from(document.querySelectorAll('.file-list button')).find(button => button.title === ${JSON.stringify(path)} && button.getAttribute('aria-expanded') === 'false')?.click()`
+          )
+          await sleep(20)
+        }
+      }
       return evaluate(
-        `Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === ${JSON.stringify(label)} || button.getAttribute('aria-label') === ${JSON.stringify(label)})?.click()`
+        `Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === ${JSON.stringify(label)} || button.getAttribute('aria-label') === ${JSON.stringify(label)} || button.title === ${JSON.stringify(label)})?.click()`
       )
     }
     const text = () => evaluate("document.querySelector('.cm-content')?.textContent ?? ''")
@@ -130,6 +140,11 @@ async function run() {
         'Margin',
         'top bar shows the wordmark when no document is open'
       )
+      assert.equal(
+        await evaluate("getComputedStyle(document.querySelector('.navigation-rail')).borderRight"),
+        await evaluate("getComputedStyle(document.querySelector('.app-header')).borderBottom"),
+        'sidebar divider matches top bar'
+      )
       await screenshot('empty-start.png')
       dialog.showOpenDialog = async () => ({
         canceled: false,
@@ -159,8 +174,8 @@ async function run() {
       })
       await click('Open Folder')
       await until(
-        async () => (await evaluate('document.querySelectorAll(".file-list button").length')) === 2,
-        'recursive Markdown discovery'
+        async () => (await evaluate('document.querySelectorAll(".file-list button").length')) === 3,
+        'folder and Markdown discovery'
       )
       assert.equal(await evaluate("document.querySelector('.file-list').inert"), true)
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'b', modifiers: ['control'] })
@@ -206,13 +221,35 @@ async function run() {
       assert.ok(layout.editorLeft > editorBounds, 'expanding files moves the editor')
       assert.ok(Math.abs(layout.filesRight - layout.editorLeft) < 1, 'files never cover the editor')
       await screenshot('files.png')
-      await evaluate("document.querySelector('.file-list button').focus()")
-      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Down' })
-      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Down' })
-      await until(
-        async () => await evaluate("document.activeElement.textContent === 'nested/b.md'"),
-        'file-list arrow navigation'
+      const key = async (keyCode) => {
+        window.webContents.sendInputEvent({ type: 'keyDown', keyCode })
+        window.webContents.sendInputEvent({ type: 'keyUp', keyCode })
+        await sleep(40)
+      }
+      assert.equal(await evaluate("document.querySelector('[role=treeitem]').textContent"), 'empty')
+      assert.equal(
+        await evaluate('document.querySelector(\'[role=treeitem][aria-level="2"]\')'),
+        null
       )
+      await evaluate('document.querySelector(\'.file-list [tabindex="0"]\').focus()')
+      await key('Down')
+      assert.equal(await evaluate('document.activeElement.title'), 'nested')
+      await key('Right')
+      assert.equal(await evaluate("document.activeElement.getAttribute('aria-expanded')"), 'true')
+      await key('Right')
+      assert.equal(await evaluate('document.activeElement.title'), 'nested/b.md')
+      await key('Left')
+      assert.equal(await evaluate('document.activeElement.title'), 'nested')
+      await key('Left')
+      assert.equal(await evaluate("document.activeElement.getAttribute('aria-expanded')"), 'false')
+      assert.equal(
+        await evaluate('document.querySelector(\'[role=treeitem][aria-level="2"]\')'),
+        null
+      )
+      await key('Right')
+      await key('Down')
+      assert.equal(await evaluate('document.activeElement.title'), 'nested/b.md')
+      await screenshot('folder-tree.png')
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' })
       window.webContents.sendInputEvent({ type: 'char', keyCode: '\r' })
       window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
