@@ -4,7 +4,6 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { guardWindowClose } from './window-lifecycle'
 import { registerIPC } from './ipc'
 import { themes } from '../shared/appearance'
-import icon from '../../resources/icon.png?asset'
 
 function createWindow(): void {
   // Create the browser window.
@@ -14,7 +13,6 @@ function createWindow(): void {
     show: false,
     backgroundColor: themes.dark.bg,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
