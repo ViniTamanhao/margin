@@ -1,9 +1,12 @@
+import { useCallback } from 'react'
 import { Picker } from './Picker'
 import { matchFiles } from '../navigation/matching'
 
+const noRecents: readonly string[] = []
+
 export function QuickOpen({
   files,
-  recents = [],
+  recents = noRecents,
   onOpen,
   onClose
 }: {
@@ -12,18 +15,21 @@ export function QuickOpen({
   onOpen(path: string): void
   onClose(): void
 }): React.JSX.Element {
+  const getItems = useCallback(
+    (query: string) =>
+      matchFiles(query, files, recents).map(({ path }) => ({
+        id: path,
+        path,
+        title: path.slice(path.lastIndexOf('/') + 1),
+        subtitle: path
+      })),
+    [files, recents]
+  )
   return (
     <Picker
       label="Quick Open"
       emptyMessage="No matching Markdown files."
-      getItems={(query) =>
-        matchFiles(query, files, recents).map(({ path }) => ({
-          id: path,
-          path,
-          title: path.slice(path.lastIndexOf('/') + 1),
-          subtitle: path
-        }))
-      }
+      getItems={getItems}
       onSelect={(item) => onOpen(item.path)}
       onClose={onClose}
     />

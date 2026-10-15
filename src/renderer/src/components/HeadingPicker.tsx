@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { EditorController } from '../editor/controller'
 import { matchHeadings, type HeadingSnapshot } from '../editor/headings'
 import { Picker } from './Picker'
@@ -26,18 +26,21 @@ export function HeadingPicker({
       })
     return () => abort.abort()
   }, [controller])
+  const getItems = useCallback(
+    (query: string) =>
+      matchHeadings(query, snapshot?.headings ?? []).map((heading) => ({
+        ...heading,
+        id: String(heading.position),
+        detail: `H${heading.level}`
+      })),
+    [snapshot]
+  )
   return (
     <Picker
       label="Go to Heading"
       busy={!snapshot && !error}
       emptyMessage={error || (snapshot ? 'No matching headings.' : 'Loading headings…')}
-      getItems={(query) =>
-        matchHeadings(query, snapshot?.headings ?? []).map((heading) => ({
-          ...heading,
-          id: String(heading.position),
-          detail: `H${heading.level}`
-        }))
-      }
+      getItems={getItems}
       onSelect={(heading) => {
         if (snapshot) controller.jumpToHeading(snapshot.version, heading.position)
       }}

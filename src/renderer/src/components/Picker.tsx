@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import './Picker.css'
 
 export interface PickerItem {
@@ -31,7 +31,7 @@ export function Picker<T extends PickerItem>({
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState<string | null>(null)
   const id = useId()
-  const items = getItems(query).slice(0, 100)
+  const items = useMemo(() => getItems(query).slice(0, 100), [getItems, query])
   const found = items.findIndex((item) => item.id === activeId)
   const active = found < 0 ? 0 : found
   const optionId = (index: number): string => `${id}-option-${index}`

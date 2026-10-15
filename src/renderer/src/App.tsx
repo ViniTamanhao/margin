@@ -169,6 +169,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       toggleFiles
     ]
   )
+  const availableCommands = useMemo(() => commands.available(), [commands])
   const executeCommand = useCallback(
     (id: CommandId): void => {
       void commands.execute(id).catch(() => {
@@ -355,7 +356,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       )}
       {picker === 'commands' && (
         <CommandPalette
-          commands={commands.available()}
+          commands={availableCommands}
           onExecute={executeCommand}
           onClose={() => setPicker(null)}
         />
