@@ -9,10 +9,12 @@ interface CommandDefinition {
   alt?: boolean
 }
 export const commandDefinitions = {
+  'help.keyboard-shortcuts': { title: 'Keyboard Shortcuts' },
+  'editor.save': { title: 'Save', shortcut: 'Ctrl/Cmd+S', key: 's', shift: false },
   'workspace.new-file': { title: 'New File' },
   'workspace.new-folder': { title: 'New Folder' },
-  'workspace.rename': { title: 'Rename' },
-  'workspace.trash': { title: 'Move to Trash' },
+  'workspace.rename': { title: 'Rename', shortcut: 'F2' },
+  'workspace.trash': { title: 'Move to Trash', shortcut: 'Delete' },
   'editor.go-to-heading': { title: 'Go to Heading' },
   'navigation.back': {
     title: 'Go Back',
@@ -103,4 +105,40 @@ export function matchCommands(query: string, commands: readonly Command[]): Comm
     })
     .sort((a, b) => b.score - a.score || comparePaths(a.command.title, b.command.title))
     .map(({ command }) => command)
+}
+
+export const fileContextMenuShortcut = 'Shift+F10'
+export function shortcutGroups(): {
+  title: string
+  shortcuts: { title: string; shortcut: string }[]
+}[] {
+  const groups: { title: string; ids: CommandId[] }[] = [
+    {
+      title: 'Navigation',
+      ids: [
+        'workspace.quick-open',
+        'workspace.search-content',
+        'commands.open',
+        'navigation.back',
+        'navigation.forward'
+      ]
+    },
+    { title: 'Workspace', ids: ['workspace.open', 'workspace.toggle-files', 'settings.open'] },
+    { title: 'Files panel', ids: ['workspace.rename', 'workspace.trash'] },
+    { title: 'Editor', ids: ['editor.save'] }
+  ]
+  return groups.map(({ title, ids }) => ({
+    title,
+    shortcuts: [
+      ...ids.flatMap((id) => {
+        const definition: CommandDefinition = commandDefinitions[id]
+        return definition.shortcut
+          ? [{ title: definition.title, shortcut: definition.shortcut }]
+          : []
+      }),
+      ...(title === 'Files panel'
+        ? [{ title: 'Context Menu', shortcut: fileContextMenuShortcut }]
+        : [])
+    ]
+  }))
 }

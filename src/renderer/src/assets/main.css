@@ -259,7 +259,7 @@ input:disabled,
   }
 }
 
-.settings-toggle {
+.shortcuts-toggle {
   margin-top: auto;
 }
 .settings-dialog {
@@ -457,4 +457,39 @@ input:disabled,
   font-weight: 600;
   padding-top: 0.3em;
   color: var(--margin-text-muted);
+}
+
+.shortcut-body {
+  padding: 0 var(--space-lg) var(--space-lg);
+  overflow: auto;
+}
+.shortcut-body h3 {
+  font-size: var(--ui-font-size);
+  color: var(--margin-text-muted);
+  margin-top: var(--space-lg);
+}
+.shortcut-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin: var(--space-sm) 0;
+}
+.shortcut-row dd {
+  margin: 0;
+  white-space: nowrap;
+}
+.shortcut-row kbd {
+  font: inherit;
+  color: var(--margin-text-muted);
+}
+.shortcut-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.picker-excerpt {
+  color: var(--margin-text-muted);
+  font-size: var(--ui-font-size-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

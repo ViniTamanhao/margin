@@ -102,17 +102,7 @@ export class EditorController {
         drawSelection(),
         EditorView.lineWrapping,
         ...(content.includes('\r\n') ? [EditorState.lineSeparator.of('\r\n')] : []),
-        keymap.of([
-          {
-            key: 'Mod-s',
-            run: () => {
-              void this.flush()
-              return true
-            }
-          },
-          ...defaultKeymap,
-          ...historyKeymap
-        ]),
+        keymap.of([...defaultKeymap, ...historyKeymap]),
         EditorView.contentAttributes.of({ 'aria-label': 'Markdown editor', spellcheck: 'true' }),
         EditorView.updateListener.of((update) => {
           const path = this.presentation.path

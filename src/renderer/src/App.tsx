@@ -4,6 +4,7 @@ import { EditorController } from './editor/controller'
 import { EditorSurface } from './editor/EditorSurface'
 import type { AppearanceSettings } from '../../shared/appearance'
 import { applyAppearance } from './appearance'
+import { KeyboardShortcuts } from './components/KeyboardShortcuts'
 import { SettingsDialog } from './components/SettingsDialog'
 import {
   createCommandRegistry,
@@ -22,6 +23,7 @@ import { useWorkspaceFiles } from './useWorkspaceFiles'
 
 function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): React.JSX.Element {
   const [appearance, setAppearance] = useState(initialAppearance)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [picker, setPicker] = useState<'files' | 'commands' | 'headings' | 'content' | null>(null)
   const [controller] = useState(() => new EditorController(window.margin.document))
@@ -78,6 +80,20 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       // The registry stores handlers; it never invokes them during render.
       // eslint-disable-next-line react-hooks/refs
       createCommandRegistry([
+        {
+          id: 'help.keyboard-shortcuts',
+          ...commandDefinitions['help.keyboard-shortcuts'],
+          isEnabled: () => !busy && !editor.locked,
+          execute: () => setShortcutsOpen(true)
+        },
+        {
+          id: 'editor.save',
+          ...commandDefinitions['editor.save'],
+          isEnabled: () => Boolean(editor.path) && !editor.locked,
+          execute: async () => {
+            await controller.flush()
+          }
+        },
         {
           id: 'workspace.new-file',
           ...commandDefinitions['workspace.new-file'],
@@ -212,7 +228,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
   }, [filesExpanded])
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {
-      if (settingsOpen || picker || event.defaultPrevented) return
+      if (shortcutsOpen || settingsOpen || picker || event.defaultPrevented) return
       if (
         event.target instanceof HTMLElement &&
         event.target.closest('.tree-inline-edit, .tree-context-menu')
@@ -240,7 +256,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       window.removeEventListener('keydown', keydown, true)
       window.removeEventListener('focus', focus)
     }
-  }, [controller, executeCommand, filesExpanded, settingsOpen, picker])
+  }, [controller, executeCommand, filesExpanded, shortcutsOpen, settingsOpen, picker])
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -293,6 +309,15 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
             onClick={() => executeCommand('workspace.toggle-files')}
           >
             <Icon name="files" />
+          </button>
+          <button
+            className="icon-button shortcuts-toggle"
+            aria-label="Keyboard Shortcuts"
+            title={commandTooltip('help.keyboard-shortcuts')}
+            disabled={!commands.get('help.keyboard-shortcuts')?.isEnabled()}
+            onClick={() => executeCommand('help.keyboard-shortcuts')}
+          >
+            <Icon name="keyboard" />
           </button>
           <button
             className="icon-button settings-toggle"
@@ -419,6 +444,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       {picker === 'headings' && (
         <HeadingPicker controller={controller} onClose={() => setPicker(null)} />
       )}
+      {shortcutsOpen && <KeyboardShortcuts onClose={() => setShortcutsOpen(false)} />}
       {settingsOpen && (
         <SettingsDialog
           settings={appearance}

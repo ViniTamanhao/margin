@@ -1,5 +1,11 @@
 import { expect, test, vi } from 'vitest'
-import { createCommandRegistry, commandForKey, matchCommands } from './commands'
+import {
+  createCommandRegistry,
+  commandForKey,
+  matchCommands,
+  shortcutGroups,
+  commandDefinitions
+} from './commands'
 
 test('stable lookup, availability and execution share enabled checks', async () => {
   let enabled = false
@@ -101,4 +107,21 @@ test('tree event targets override an older rendered selection through the same r
   expect(execute).toHaveBeenLastCalledWith(focused)
   await commands.execute('workspace.new-file', null)
   expect(execute).toHaveBeenLastCalledWith(null)
+})
+
+test('shortcut sheet derives registered shortcuts and omits commands without shortcuts', () => {
+  const shortcuts = shortcutGroups().flatMap((group) => group.shortcuts)
+  expect(shortcuts).toContainEqual({
+    title: 'Quick Open',
+    shortcut: commandDefinitions['workspace.quick-open'].shortcut
+  })
+  expect(shortcuts).toContainEqual({
+    title: 'Search Workspace',
+    shortcut: commandDefinitions['workspace.search-content'].shortcut
+  })
+  expect(
+    shortcuts.some(({ title }) => title === 'New File' || title === 'Keyboard Shortcuts')
+  ).toBe(false)
+  expect(commandForKey(key({ key: 'f' }))).toBe('workspace.search-content')
+  expect(commandForKey(key({ key: 's', shiftKey: false }))).toBe('editor.save')
 })
