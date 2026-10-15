@@ -27,9 +27,9 @@ export function useWorkspaceFiles(controller: EditorController): {
   setEditing: (editing: boolean) => void
   treeRef: React.RefObject<FileTreeHandle | null>
   openFolder(): Promise<void>
-  beginEdit(kind: TreeEditKind): void
+  beginEdit(kind: TreeEditKind, target?: WorkspaceEntry | null): void
   commitEdit(edit: TreeEdit, name: string): Promise<string | null>
-  trash(): Promise<void>
+  trash(target?: WorkspaceEntry | null): Promise<void>
 } {
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const current = useRef<Workspace | null>(null)
@@ -118,10 +118,11 @@ export function useWorkspaceFiles(controller: EditorController): {
   }, [controller])
 
   const beginEdit = useCallback(
-    (kind: TreeEditKind): void => {
+    (kind: TreeEditKind, target: WorkspaceEntry | null = selection): void => {
       if (workspace && !busy && !editing) {
         setError('')
-        tree.current?.beginEdit(kind, selection)
+        setSelection(target)
+        tree.current?.beginEdit(kind, target)
       }
     },
     [workspace, busy, editing, selection]
@@ -182,32 +183,33 @@ export function useWorkspaceFiles(controller: EditorController): {
     [workspace, busy, controller, adopt]
   )
 
-  const trash = useCallback(async (): Promise<void> => {
-    if (!workspace || !selection || busy || editing) return
-    setBusy(true)
-    setError('')
-    try {
-      const result = await controller.changeWorkspaceItem(selection.path, 'trash', () =>
-        window.margin.workspace.trash({ root: workspace.root, path: selection.path })
-      )
-      if (!result.ok) setError(result.error.message)
-      else if (result.value) adopt(result.value.change)
-      const next = current.current
-      tree.current?.reveal(
-        next
-          ? selectedEntry(
-              next,
-              result.ok && result.value ? parentPath(selection.path) : selection.path
-            )
-          : null,
-        true
-      )
-    } catch {
-      setError('Could not move this item to Trash. It was kept in place.')
-    } finally {
-      setBusy(false)
-    }
-  }, [workspace, selection, busy, editing, controller, adopt])
+  const trash = useCallback(
+    async (target: WorkspaceEntry | null = selection): Promise<void> => {
+      if (!workspace || !target || busy || editing) return
+      setSelection(target)
+      setBusy(true)
+      setError('')
+      try {
+        const result = await controller.changeWorkspaceItem(target.path, 'trash', () =>
+          window.margin.workspace.trash({ root: workspace.root, path: target.path })
+        )
+        if (!result.ok) setError(result.error.message)
+        else if (result.value) adopt(result.value.change)
+        const next = current.current
+        tree.current?.reveal(
+          next
+            ? selectedEntry(next, result.ok && result.value ? parentPath(target.path) : target.path)
+            : null,
+          true
+        )
+      } catch {
+        setError('Could not move this item to Trash. It was kept in place.')
+      } finally {
+        setBusy(false)
+      }
+    },
+    [workspace, selection, busy, editing, controller, adopt]
+  )
 
   return {
     workspace,

@@ -65,3 +65,40 @@ test('Back and Forward use Alt alone without stealing platform modified arrows',
     commandForKey(key({ key: 'ArrowLeft', altKey: true, ctrlKey: true, shiftKey: false }))
   ).toBeUndefined()
 })
+
+test('tree operations have stable palette IDs and F2/Delete stay out of global dispatch', async () => {
+  const execute = vi.fn()
+  const commands = createCommandRegistry([
+    { id: 'workspace.new-file', title: 'New File', isEnabled: () => true, execute },
+    { id: 'workspace.new-folder', title: 'New Folder', isEnabled: () => true, execute },
+    { id: 'workspace.rename', title: 'Rename', isEnabled: () => false, execute },
+    { id: 'workspace.trash', title: 'Move to Trash', isEnabled: () => false, execute }
+  ])
+  expect(matchCommands('', commands.available()).map(({ id }) => id)).toEqual([
+    'workspace.new-file',
+    'workspace.new-folder'
+  ])
+  expect(await commands.execute('workspace.new-file')).toBe(true)
+  expect(await commands.execute('workspace.rename')).toBe(false)
+  expect(commandForKey(key({ key: 'F2', ctrlKey: false, shiftKey: false }))).toBeUndefined()
+  expect(commandForKey(key({ key: 'Delete', ctrlKey: false, shiftKey: false }))).toBeUndefined()
+})
+
+test('tree event targets override an older rendered selection through the same registry', async () => {
+  const previous = { path: 'old.md', kind: 'file' as const }
+  const focused = { path: 'focused.md', kind: 'file' as const }
+  const execute = vi.fn()
+  const commands = createCommandRegistry([
+    {
+      id: 'workspace.rename',
+      title: 'Rename',
+      isEnabled: (target) => Boolean(target ?? previous),
+      execute
+    },
+    { id: 'workspace.new-file', title: 'New File', isEnabled: () => true, execute }
+  ])
+  expect(await commands.execute('workspace.rename', focused)).toBe(true)
+  expect(execute).toHaveBeenLastCalledWith(focused)
+  await commands.execute('workspace.new-file', null)
+  expect(execute).toHaveBeenLastCalledWith(null)
+})

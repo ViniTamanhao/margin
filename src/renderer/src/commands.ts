@@ -1,3 +1,4 @@
+import type { WorkspaceEntry } from '../../shared/api'
 import { fuzzyScore, comparePaths } from './navigation/matching'
 
 interface CommandDefinition {
@@ -46,23 +47,23 @@ export interface Command {
   id: CommandId
   title: string
   shortcut?: string
-  isEnabled(): boolean
-  execute(): void | Promise<void>
+  isEnabled(target?: WorkspaceEntry | null): boolean
+  execute(target?: WorkspaceEntry | null): void | Promise<void>
 }
 
 // Explicit application actions; shortcuts, controls and palettes share this boundary.
 export function createCommandRegistry(commands: readonly Command[]): {
   get(id: CommandId): Command | undefined
   available(): Command[]
-  execute(id: CommandId): Promise<boolean>
+  execute(id: CommandId, target?: WorkspaceEntry | null): Promise<boolean>
 } {
   return {
     get: (id) => commands.find((command) => command.id === id),
     available: () => commands.filter((command) => command.isEnabled()),
-    async execute(id) {
+    async execute(id, target) {
       const command = commands.find((command) => command.id === id)
-      if (!command?.isEnabled()) return false
-      await command.execute()
+      if (!command?.isEnabled(target)) return false
+      await command.execute(target)
       return true
     }
   }

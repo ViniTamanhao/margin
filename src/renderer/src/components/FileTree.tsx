@@ -32,7 +32,7 @@ interface FileTreeProps {
   disabled: boolean
   onSelect(entry: WorkspaceEntry | null): void
   onOpen(path: string): void
-  onCommand(id: FileTreeCommandId): void
+  onCommand(id: FileTreeCommandId, target?: WorkspaceEntry | null): void
   onCommit(edit: TreeEdit, name: string): Promise<string | null>
   onEditingChange(editing: boolean): void
 }
@@ -279,10 +279,10 @@ export function FileTree({
                     }
                     switch (event.key) {
                       case 'F2':
-                        onCommand('workspace.rename')
+                        onCommand('workspace.rename', { path: node.path, kind: node.kind })
                         break
                       case 'Delete':
-                        onCommand('workspace.trash')
+                        onCommand('workspace.trash', { path: node.path, kind: node.kind })
                         break
                       case 'ArrowDown':
                         focus(rows[Math.min(index + 1, rows.length - 1)].node.path)
@@ -339,7 +339,7 @@ export function FileTree({
             x={context.x}
             y={context.y}
             onClose={closeContext}
-            onChoose={onCommand}
+            onChoose={(id) => onCommand(id, context.target)}
             actions={
               context.target?.kind === 'file'
                 ? ['workspace.rename', 'workspace.trash']

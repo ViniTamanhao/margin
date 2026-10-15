@@ -1,3 +1,4 @@
+import type { WorkspaceEntry } from '../../shared/api'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { EditorController } from './editor/controller'
 import { EditorSurface } from './editor/EditorSurface'
@@ -80,33 +81,41 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           id: 'workspace.new-file',
           ...commandDefinitions['workspace.new-file'],
           isEnabled: () => Boolean(workspace) && !busy && !editor.locked && !treeEditing,
-          execute: () => {
+          execute: (target) => {
             setFilesExpanded(true)
-            beginEdit('new-file')
+            beginEdit('new-file', target)
           }
         },
         {
           id: 'workspace.new-folder',
           ...commandDefinitions['workspace.new-folder'],
           isEnabled: () => Boolean(workspace) && !busy && !editor.locked && !treeEditing,
-          execute: () => {
+          execute: (target) => {
             setFilesExpanded(true)
-            beginEdit('new-folder')
+            beginEdit('new-folder', target)
           }
         },
         {
           id: 'workspace.rename',
           ...commandDefinitions['workspace.rename'],
-          isEnabled: () => Boolean(treeSelection) && !busy && !editor.locked && !treeEditing,
-          execute: () => {
+          isEnabled: (target) =>
+            Boolean(target === undefined ? treeSelection : target) &&
+            !busy &&
+            !editor.locked &&
+            !treeEditing,
+          execute: (target) => {
             setFilesExpanded(true)
-            beginEdit('rename')
+            beginEdit('rename', target)
           }
         },
         {
           id: 'workspace.trash',
           ...commandDefinitions['workspace.trash'],
-          isEnabled: () => Boolean(treeSelection) && !busy && !editor.locked && !treeEditing,
+          isEnabled: (target) =>
+            Boolean(target === undefined ? treeSelection : target) &&
+            !busy &&
+            !editor.locked &&
+            !treeEditing,
           execute: trash
         },
         {
@@ -181,8 +190,8 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
   )
   const availableCommands = useMemo(() => commands.available(), [commands])
   const executeCommand = useCallback(
-    (id: CommandId): void => {
-      void commands.execute(id).catch(() => {
+    (id: CommandId, target?: WorkspaceEntry | null): void => {
+      void commands.execute(id, target).catch(() => {
         setError(`Could not execute “${commandDefinitions[id].title}”. Try again.`)
       })
     },
