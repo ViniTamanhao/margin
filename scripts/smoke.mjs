@@ -12,7 +12,12 @@ await mkdir(join(root, 'empty-workspace'))
 await mkdir(join(root, 'workspace/.git'))
 await mkdir(join(root, 'workspace/empty'))
 await writeFile(join(root, 'workspace/a.md'), '# Original\n')
-await writeFile(join(root, 'workspace/nested/b.md'), '# Second\n')
+await writeFile(
+  join(root, 'workspace/nested/b.md'),
+  '# Dragonfire\n\n## Damage\n\n' +
+    'A long passage.\n\n'.repeat(90) +
+    '## Interaction with Armor\n\nArmor details.\n\n### Magical Resistance\n'
+)
 await writeFile(join(root, 'workspace/.git/ignored.md'), 'ignored')
 async function run(mode) {
   await new Promise((resolve, reject) => {

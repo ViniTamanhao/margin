@@ -3,7 +3,7 @@
 A minimal, local-first, keyboard-first Markdown editor. **Telescope for prose.**
 
 Margin provides normal folder workspaces, a CodeMirror writing surface, contextual
-Markdown presentation and lightweight appearance settings.
+Markdown presentation, transient keyboard pickers and lightweight appearance settings.
 Markdown files remain the source of truth; there is no project format or database.
 
 ## Run
@@ -17,10 +17,13 @@ Open Folder selects a directory using the native system picker. Folders (includi
 appear in a collapsible tree in the temporary Files panel; `.git`, `node_modules`, `.hg`, `.svn` and symbolic
 links are excluded. The last workspace is restored on startup if it is accessible.
 
+- **Ctrl/Cmd+P:** Quick Open Markdown files by fuzzy filename or relative path.
+- **Ctrl/Cmd+Shift+P:** Command Palette; type **Go to Heading** for current-document headings.
+- **Alt+Left / Alt+Right:** Back / Forward through navigation locations.
 - **Ctrl/Cmd+Shift+O:** Open Folder.
 - **Ctrl/Cmd+B:** expand/collapse Files; opening a file collapses the panel.
 - **Ctrl/Cmd+,:** Settings.
-- **Escape:** close Files or cancel appearance changes and restore focus.
+- **Escape:** close the active picker, close Files, or cancel appearance changes and restore focus.
 - **Tab:** enter or leave the file tree.
 - **Up/Down, Home/End:** move between visible folders and files.
 - **Right/Left:** expand/collapse a folder, or move to its first child/parent.
@@ -33,6 +36,51 @@ flushes pending edits first. Clean documents reload external changes; conflictin
 local edits stay in memory and pause autosave. Choose the disk version, explicitly
 keep your version, or save your edits to a new file. A conflict or failed save keeps
 the window open.
+
+## Keyboard navigation
+
+Quick Open, Command Palette and Go to Heading share one centered `Picker`: a query
+input, active result, Up/Down movement, Enter activation and Escape cancellation.
+The input keeps focus and exposes its selected listbox option through
+`aria-activedescendant`. Mouse movement and keyboard movement share selection.
+Native modal dialogs contain focus; cancellation restores the previously focused
+control. Activation closes the picker before opening a file, another picker or Settings.
+Only the first 100 matches are rendered. All styles consume the existing theme tokens.
+
+Quick Open searches the workspace's existing Markdown paths entirely in memory.
+Replaceable matching functions score case-insensitive subsequences, favoring word
+and camel-case boundaries, contiguous runs and filename matches over path-only
+matches. Ties are deterministic. An empty query orders known recent files first,
+then uses stable relative-path ordering. No filesystem scan or IPC occurs per query.
+Deleted files disappear through the existing watcher. A failed open preserves the
+active document and reports the unavailable target.
+
+`commands.ts` contains explicit stable IDs, titles and shortcuts. The application
+binds their enabled predicates and handlers in one registry. Controls, shortcuts and
+palette entries use that registry's execution boundary; unavailable commands are
+hidden from the palette. Application shortcuts run before CodeMirror keymaps,
+including Alt+Arrow navigation. Settings remains the existing appearance dialog.
+
+`EditorController` owns a small in-memory `NavigationSession`. Successful file opens
+from either the sidebar or Quick Open and explicit heading jumps record departure
+locations as `{ path, position }`. Cursor movement and typing do not record history.
+Back/Forward restore document, primary cursor, editor focus and scroll around the
+location. Duplicate consecutive locations are suppressed, and new navigation after
+Back clears Forward. History is bounded to 100 entries per direction; recents are
+unique, most-recent-first and bounded to 50 files. Both reset on a workspace switch
+or app restart. Failed and superseded opens do not advance history or recents.
+Unavailable history targets report an error and preserve the current location and
+stacks. Stored offsets are clamped after document changes; they are not semantic
+anchors that track text edits.
+
+Go to Heading reads the active CodeMirror document, including unsaved edits. It
+uses the existing Markdown syntax tree for ATX and Setext heading levels, excludes
+code fences and indented code, and strips common inline markers from result titles.
+Parsing finishes in short budgets with yields, and cancelled or stale requests are
+rejected. Only heading metadata enters React state. Selecting a heading moves the
+cursor to its source start, scrolls it into view and records a return location. If
+the source changed while the picker was open, reopen it to get current targets.
+The command is available from Command Palette without assigning another shortcut.
 
 ## Appearance and Markdown presentation
 
@@ -134,9 +182,11 @@ local validation.
 real Electron application against temporary files, substitutes deterministic native
 dialog results, and checks editing, saving, conflicts, keyboard navigation, window
 closing, contextual syntax, Markdown clipboard behavior, appearance previews, focus
-restoration and workspace/settings restoration across separate processes. It leaves
-its temporary artifacts and screenshots in the printed path for inspection.
+restoration, Quick Open, palette execution, heading jumps, Back/Forward cursor
+restoration, deleted picker targets and workspace/settings restoration across
+separate processes. It leaves its temporary artifacts and screenshots in the printed path for inspection.
 
 See [the Sessions 0–2 implementation report](docs/sessions-0-2-report.md) for decisions,
-validation, commit progression and remaining limits. Search, palettes,
-backlinks, graphs, plugins, sync and AI are deferred to later sessions.
+validation, commit progression and remaining limits. Workspace content search,
+ripgrep, semantic indexing, backlinks, graphs, tabs, split panes, persistent navigation,
+configurable shortcuts, plugins, sync and AI remain deferred.
