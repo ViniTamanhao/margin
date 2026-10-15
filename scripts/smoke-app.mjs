@@ -34,6 +34,13 @@ async function run() {
     window.show()
     window.focus()
     const evaluate = (code) => window.webContents.executeJavaScript(code)
+    // Capturing a frame advances Chromium's compositor even when the desktop
+    // occludes the test window. Measure rendered geometry rather than a stale frame.
+    const measure = async (code) => {
+      await window.capturePage()
+      return evaluate(code)
+    }
+
     const screenshot = async (name) => {
       window.show()
       window.focus()
@@ -251,7 +258,7 @@ async function run() {
       )
       await until(
         async () =>
-          await evaluate("document.querySelector('.file-panel').getBoundingClientRect().width < 1"),
+          await measure("document.querySelector('.file-panel').getBoundingClientRect().width < 1"),
         'collapse animation completes'
       )
       const editorBounds = await evaluate(
@@ -260,7 +267,7 @@ async function run() {
       await click('Toggle files')
       await until(
         async () =>
-          await evaluate(
+          await measure(
             "document.querySelector('.file-panel').getBoundingClientRect().width > 100"
           ),
         'expansion completes'
@@ -334,7 +341,12 @@ async function run() {
       )
       await click('a.md')
       await until(async () => (await text()).includes('# Original'), 'document opens')
-      await sleep(160)
+      await until(
+        async () =>
+          (await measure("document.querySelector('.writing-pane').getBoundingClientRect().x")) ===
+          editorBounds,
+        'file opening finishes collapsing the sidebar'
+      )
       assert.equal(
         await evaluate("document.querySelector('.writing-pane').getBoundingClientRect().x"),
         editorBounds,
