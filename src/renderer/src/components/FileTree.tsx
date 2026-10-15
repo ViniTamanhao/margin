@@ -1,5 +1,6 @@
 import {
   Fragment,
+  useCallback,
   useImperativeHandle,
   useLayoutEffect,
   useMemo,
@@ -14,6 +15,7 @@ import { Icon } from './Icon'
 import { buildFileTree, visibleFileTreeRows } from './file-tree'
 import { ancestorPaths, treeEdit, type TreeEdit, type TreeEditKind } from './tree-edit'
 import { InlineTreeName } from './InlineTreeName'
+import { TreeContextMenu } from './TreeContextMenu'
 import { commandTooltip, type FileTreeCommandId } from '../commands'
 import './FileTree.css'
 
@@ -49,6 +51,12 @@ export function FileTree({
 }: FileTreeProps): React.JSX.Element {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [edit, setEdit] = useState<TreeEdit | null>(null)
+  const [context, setContext] = useState<{
+    x: number
+    y: number
+    target: WorkspaceEntry | null
+  } | null>(null)
+  const closeContext = useCallback((): void => setContext(null), [])
   const buttons = useRef(new Map<string, HTMLButtonElement>())
   const lastFocused = useRef<HTMLButtonElement | null>(null)
   const pendingFocus = useRef<string | null | undefined>(undefined)
@@ -191,7 +199,25 @@ export function FileTree({
           </button>
         </div>
       </div>
-      <div className="file-tree-scroll">
+      <div
+        className="file-tree-scroll"
+        onClick={(event) => {
+          if (
+            event.target === event.currentTarget ||
+            (event.target instanceof HTMLElement && event.target.getAttribute('role') === 'tree')
+          ) {
+            onSelect(null)
+            document.getElementById('workspace-files')?.focus()
+          }
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          if (disabled || edit) return
+          onSelect(null)
+          document.getElementById('workspace-files')?.focus()
+          setContext({ x: event.clientX, y: event.clientY, target: null })
+        }}
+      >
         <div role="tree" aria-label="Folders and Markdown files">
           {rows.map(({ node, parent, level, position, siblings }, index) => (
             <Fragment key={node.path}>
@@ -227,8 +253,30 @@ export function FileTree({
                     if (node.kind === 'directory') toggle(node.path)
                     else onOpen(node.path)
                   }}
+                  onContextMenu={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    if (disabled || edit) return
+                    event.currentTarget.focus()
+                    onSelect({ path: node.path, kind: node.kind })
+                    setContext({
+                      x: event.clientX,
+                      y: event.clientY,
+                      target: { path: node.path, kind: node.kind }
+                    })
+                  }}
                   onKeyDown={(event) => {
                     if (disabled || edit) return
+                    if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) {
+                      event.preventDefault()
+                      const bounds = event.currentTarget.getBoundingClientRect()
+                      setContext({
+                        x: bounds.left,
+                        y: bounds.bottom,
+                        target: { path: node.path, kind: node.kind }
+                      })
+                      return
+                    }
                     switch (event.key) {
                       case 'F2':
                         onCommand('workspace.rename')
@@ -280,6 +328,32 @@ export function FileTree({
         </div>
         {!rows.length && !edit && <p className="file-list-empty">No folders or Markdown files.</p>}
       </div>
+      {context &&
+        !disabled &&
+        !edit &&
+        (!context.target ||
+          (context.target.kind === 'directory' ? workspace.directories : workspace.files).includes(
+            context.target.path
+          )) && (
+          <TreeContextMenu
+            x={context.x}
+            y={context.y}
+            onClose={closeContext}
+            onChoose={onCommand}
+            actions={
+              context.target?.kind === 'file'
+                ? ['workspace.rename', 'workspace.trash']
+                : context.target
+                  ? [
+                      'workspace.new-file',
+                      'workspace.new-folder',
+                      'workspace.rename',
+                      'workspace.trash'
+                    ]
+                  : ['workspace.new-file', 'workspace.new-folder']
+            }
+          />
+        )}
     </>
   )
 }

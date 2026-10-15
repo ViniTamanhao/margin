@@ -41,3 +41,36 @@
   font-size: var(--ui-font-size-sm);
   overflow-wrap: anywhere;
 }
+
+.tree-context-menu {
+  position: fixed;
+  z-index: 10;
+  min-width: 180px;
+  padding: var(--space-xs);
+  border: 1px solid var(--margin-border);
+  border-radius: var(--radius-sm);
+  background: var(--margin-surface);
+  color: var(--margin-text);
+  font-size: var(--ui-font-size);
+}
+.tree-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  width: 100%;
+  min-height: var(--control-height);
+  padding: var(--space-xs) var(--space-sm);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+}
+.tree-context-menu button:hover,
+.tree-context-menu button:focus-visible {
+  background: var(--margin-selection);
+}
+.tree-menu-shortcut {
+  margin-left: auto;
+  color: var(--margin-text-muted);
+  font-size: var(--ui-font-size-sm);
+}

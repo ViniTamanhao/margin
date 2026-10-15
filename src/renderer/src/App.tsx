@@ -197,7 +197,11 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {
       if (settingsOpen || picker || event.defaultPrevented) return
-      if (event.target instanceof HTMLElement && event.target.closest('.tree-inline-edit')) return
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest('.tree-inline-edit, .tree-context-menu')
+      )
+        return
       if (event.key === 'Escape' && filesExpanded) {
         event.preventDefault()
         setFilesExpanded(false)
