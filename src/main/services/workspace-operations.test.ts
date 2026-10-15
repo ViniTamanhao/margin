@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import { mkdtemp, mkdir, writeFile, readFile, symlink, rm, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -125,4 +125,57 @@ test('rename rejects collisions, non-Markdown names, traversal, symlinks and sta
   )
   expect(await readFile(join(root, 'b.md'), 'utf8')).toBe('B')
   expect(await readdir(join(root, 'notes'))).toEqual([])
+})
+
+test('Trash validates the actual item type and path, always confirms and calls only the injected boundary', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'margin-trash-'))
+  const trash = vi.fn<(absolute: string) => Promise<void>>(async () => {})
+  const service = new WorkspaceService(trash)
+  fixtures.push({ root, service })
+  await mkdir(join(root, 'folder.md'))
+  await writeFile(join(root, 'folder.md/unseen.png'), 'Keep')
+  await writeFile(join(root, 'a.md'), 'A')
+  await service.open(root)
+  const confirm = vi.fn(async () => true)
+  expect(await service.trash({ root, path: 'folder.md' }, confirm)).toMatchObject({ ok: true })
+  expect(confirm).toHaveBeenCalledWith({ path: 'folder.md', kind: 'directory' })
+  expect(trash).toHaveBeenCalledExactlyOnceWith(join(root, 'folder.md'))
+  expect(await readFile(join(root, 'folder.md/unseen.png'), 'utf8')).toBe('Keep')
+  expect(await service.trash({ root, path: 'a.md' }, async () => false)).toEqual({
+    ok: true,
+    value: null
+  })
+  expect(trash).toHaveBeenCalledOnce()
+  for (const path of ['', '../a.md', '/tmp/a.md', '.git', 'x/../a.md']) {
+    expect(await service.trash({ root, path }, confirm)).toMatchObject({ ok: false })
+  }
+  await symlink(join(root, 'a.md'), join(root, 'link.md'))
+  expect(await service.trash({ root, path: 'link.md' }, confirm)).toMatchObject({ ok: false })
+  expect(trash).toHaveBeenCalledOnce()
+})
+
+test('Trash revalidates after confirmation and keeps changed or failed targets', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'margin-trash-'))
+  const trash = vi.fn<(absolute: string) => Promise<void>>(async () => {
+    throw new Error('Trash unavailable')
+  })
+  const service = new WorkspaceService(trash)
+  fixtures.push({ root, service })
+  await writeFile(join(root, 'a.md'), 'A')
+  await service.open(root)
+  expect(
+    await service.trash({ root, path: 'a.md' }, async () => {
+      await rm(join(root, 'a.md'))
+      await mkdir(join(root, 'a.md'))
+      return true
+    })
+  ).toMatchObject({ ok: false, error: { code: 'changed' } })
+  expect(trash).not.toHaveBeenCalled()
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+  expect(await service.trash({ root, path: 'a.md' }, async () => true)).toMatchObject({
+    ok: false,
+    error: { code: 'filesystem' }
+  })
+  log.mockRestore()
+  expect(await readdir(root)).toContain('a.md')
 })

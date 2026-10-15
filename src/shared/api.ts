@@ -9,6 +9,7 @@ export const channels = {
   workspaceCreateFile: 'workspace:create-file',
   workspaceCreateFolder: 'workspace:create-folder',
   workspaceRename: 'workspace:rename',
+  workspaceTrash: 'workspace:trash',
   documentRead: 'document:read',
   documentSave: 'document:save',
   documentSaveCopy: 'document:save-copy',
@@ -32,7 +33,7 @@ export interface Workspace {
 export interface WorkspaceChange {
   workspace: Workspace
   changedPaths: string[]
-  operation?: { kind: 'rename'; from: string; to: string }
+  operation?: { kind: 'rename'; from: string; to: string } | { kind: 'trash'; path: string }
 }
 export interface WorkspaceEntry {
   path: string
@@ -42,6 +43,10 @@ export interface WorkspaceCreateRequest {
   root: string
   parentPath: string
   name: string
+}
+export interface WorkspaceItemRequest {
+  root: string
+  path: string
 }
 export interface WorkspaceRenameRequest {
   root: string
@@ -87,6 +92,7 @@ export interface MarginAPI {
     createFile(request: WorkspaceCreateRequest): Promise<WorkspaceResult<WorkspaceMutation>>
     createFolder(request: WorkspaceCreateRequest): Promise<WorkspaceResult<WorkspaceMutation>>
     rename(request: WorkspaceRenameRequest): Promise<WorkspaceResult<WorkspaceMutation>>
+    trash(request: WorkspaceItemRequest): Promise<WorkspaceResult<WorkspaceMutation | null>>
     onChanged(callback: (change: WorkspaceChange) => void): () => void
   }
   document: {

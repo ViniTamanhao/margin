@@ -21,6 +21,7 @@ const api: MarginAPI = {
     createFile: (request) => ipcRenderer.invoke(channels.workspaceCreateFile, request),
     createFolder: (request) => ipcRenderer.invoke(channels.workspaceCreateFolder, request),
     rename: (request) => ipcRenderer.invoke(channels.workspaceRename, request),
+    trash: (request) => ipcRenderer.invoke(channels.workspaceTrash, request),
     open: () => ipcRenderer.invoke(channels.workspaceOpen),
     current: () => ipcRenderer.invoke(channels.workspaceCurrent),
     onChanged: (callback) => {

@@ -6,6 +6,7 @@ import type {
   WorkspaceChange,
   WorkspaceCreateRequest,
   WorkspaceRenameRequest,
+  WorkspaceItemRequest,
   WorkspaceEntry,
   WorkspaceMutation,
   WorkspaceResult
@@ -15,6 +16,7 @@ import {
   WorkspaceFiles,
   WorkspaceFileError,
   workspaceError,
+  sameIdentity,
   ignoredDirectories,
   isMarkdown
 } from './workspace-files'
@@ -30,6 +32,15 @@ export class WorkspaceService {
   private pending: Promise<void> = Promise.resolve()
   private ready: Promise<void> = Promise.resolve()
   private finishReady: () => void = () => {}
+
+  constructor(
+    private readonly trashItem: (absolute: string) => Promise<void> = async () => {
+      throw new WorkspaceFileError(
+        'filesystem',
+        'Trash is unavailable. The item was kept in place.'
+      )
+    }
+  ) {}
 
   private enqueue<T>(task: () => Promise<T>): Promise<T> {
     const result = this.pending.then(task)
@@ -232,7 +243,7 @@ export class WorkspaceService {
             'The workspace changed. Choose an item in the current folder.'
           )
         const { entry, operation } = await action(this.paths)
-        if (operation) {
+        if (operation?.kind === 'rename') {
           this.workspace.files = this.workspace.files
             .map((path) => remapPath(path, operation.from, operation.to))
             .sort()
@@ -268,6 +279,48 @@ export class WorkspaceService {
     return this.mutate(request.root, async (paths) => {
       const entry = await paths.rename(request.path, request.name)
       return { entry, operation: { kind: 'rename', from: request.path, to: entry.path } }
+    })
+  }
+
+  async trash(
+    request: WorkspaceItemRequest,
+    confirm: (entry: WorkspaceEntry) => Promise<boolean>
+  ): Promise<WorkspaceResult<WorkspaceMutation | null>> {
+    await this.ready
+    return this.enqueue(async () => {
+      try {
+        if (!this.workspace || !this.paths || this.workspace.root !== request.root) {
+          throw new WorkspaceFileError(
+            'changed',
+            'The workspace changed. Choose an item in the current folder.'
+          )
+        }
+        const source = await this.paths.entry(request.path)
+        if (!(await confirm(source.entry))) return { ok: true, value: null }
+        // A confirmation must not authorize a different item swapped into this path.
+        const latest = await this.paths.entry(request.path)
+        if (
+          !sameIdentity(source.stats, latest.stats) ||
+          source.stats.mtimeMs !== latest.stats.mtimeMs ||
+          source.stats.size !== latest.stats.size
+        ) {
+          throw new WorkspaceFileError(
+            'changed',
+            'This item changed while confirming. Review it and try again.'
+          )
+        }
+        await this.trashItem(latest.absolute)
+        this.remove(request.path)
+        return {
+          ok: true,
+          value: {
+            entry: source.entry,
+            change: this.publish({ kind: 'trash', path: request.path })
+          }
+        }
+      } catch (error) {
+        return { ok: false, error: workspaceError(error) }
+      }
     })
   }
 
