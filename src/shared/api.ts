@@ -4,6 +4,8 @@ export const channels = {
   appInfo: 'app:info',
   appearanceRead: 'appearance:read',
   appearanceSave: 'appearance:save',
+  workspaceSearch: 'workspace:search',
+  workspaceCancelSearch: 'workspace:cancel-search',
   workspaceOpen: 'workspace:open',
   workspaceCurrent: 'workspace:current',
   workspaceCreateFile: 'workspace:create-file',
@@ -76,6 +78,20 @@ export type SaveResult =
   | { kind: 'saved'; revision: string }
   | { kind: 'conflict'; current: DocumentSnapshot }
   | { kind: 'missing' }
+export interface WorkspaceSearchRequest {
+  root: string
+  query: string
+  requestId: string
+  limit?: number
+}
+export interface WorkspaceSearchResult {
+  path: string
+  line: number
+  column: number
+  position: number
+  length: number
+  preview: string
+}
 export interface MarginAPI {
   app: { info(): Promise<AppInfo> }
   appearance: {
@@ -87,6 +103,8 @@ export interface MarginAPI {
     confirmClose(saved: boolean): Promise<void>
   }
   workspace: {
+    search(request: WorkspaceSearchRequest): Promise<WorkspaceSearchResult[]>
+    cancelSearch(requestId: string): Promise<void>
     open(): Promise<Workspace | null>
     current(): Promise<Workspace | null>
     createFile(request: WorkspaceCreateRequest): Promise<WorkspaceResult<WorkspaceMutation>>

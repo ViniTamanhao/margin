@@ -18,6 +18,8 @@ const api: MarginAPI = {
     confirmClose: (saved) => ipcRenderer.invoke(channels.windowConfirmClose, saved)
   },
   workspace: {
+    search: (request) => ipcRenderer.invoke(channels.workspaceSearch, request),
+    cancelSearch: (id) => ipcRenderer.invoke(channels.workspaceCancelSearch, id),
     createFile: (request) => ipcRenderer.invoke(channels.workspaceCreateFile, request),
     createFolder: (request) => ipcRenderer.invoke(channels.workspaceCreateFolder, request),
     rename: (request) => ipcRenderer.invoke(channels.workspaceRename, request),

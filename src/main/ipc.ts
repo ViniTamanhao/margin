@@ -15,6 +15,7 @@ import { confirmWindowClose } from './window-lifecycle'
 import { WorkspaceService } from './services/workspace'
 import { AppStateService } from './services/app-state'
 import { AppearanceService } from './services/appearance'
+import { ContentSearchService } from './services/content-search'
 import { DocumentService } from './services/documents'
 
 export function registerIPC(version: string, stateFile: string): WorkspaceService {
@@ -48,11 +49,15 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
     }
   })
   const documents = new DocumentService(workspaces, join(dirname(stateFile), 'recovery'))
+  const search = new ContentSearchService(workspaces)
+  const searches = new Map<number, { id: string; abort: AbortController }>()
   const api: MarginAPI = {
     app: { info: async () => ({ name: 'Margin', version }) },
     appearance: { read: () => appearance.read(), save: (settings) => appearance.save(settings) },
     window: { onClosing: () => () => {}, confirmClose: async () => {} },
     workspace: {
+      search: (request) => search.search(request, new AbortController().signal),
+      cancelSearch: async () => {},
       createFile: (request) => workspaces.createFile(request),
       createFolder: (request) => workspaces.createFolder(request),
       rename: (request) => workspaces.rename(request),
@@ -190,6 +195,54 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
   ipcMain.handle(channels.workspaceRename, (event, input: unknown) => {
     trusted(event)
     return renameRequest(input) ? api.workspace.rename(input) : invalidWorkspaceRequest
+  })
+  ipcMain.handle(channels.workspaceSearch, async (event, input: unknown) => {
+    trusted(event)
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      !('root' in input) ||
+      typeof input.root !== 'string' ||
+      !('query' in input) ||
+      typeof input.query !== 'string' ||
+      input.query.length > 1000 ||
+      !('requestId' in input) ||
+      typeof input.requestId !== 'string' ||
+      ('limit' in input &&
+        (typeof input.limit !== 'number' ||
+          !Number.isInteger(input.limit) ||
+          input.limit < 1 ||
+          input.limit > 200))
+    ) {
+      throw new Error('Invalid search request.')
+    }
+    const sender = event.sender.id
+    searches.get(sender)?.abort.abort()
+    const abort = new AbortController()
+    const entry = { id: input.requestId, abort }
+    searches.set(sender, entry)
+    const destroyed = (): void => abort.abort()
+    event.sender.once('destroyed', destroyed)
+    try {
+      return await search.search(
+        {
+          root: input.root,
+          query: input.query,
+          requestId: input.requestId,
+          limit: 'limit' in input ? (input.limit as number) : undefined
+        },
+        abort.signal
+      )
+    } finally {
+      event.sender.removeListener('destroyed', destroyed)
+      if (searches.get(sender) === entry) searches.delete(sender)
+    }
+  })
+  ipcMain.handle(channels.workspaceCancelSearch, (event, id: unknown) => {
+    trusted(event)
+    if (typeof id !== 'string') throw new Error('Invalid search cancellation.')
+    const active = searches.get(event.sender.id)
+    if (active?.id === id) active.abort.abort()
   })
   ipcMain.handle(channels.documentRead, (event, path: unknown) => {
     trusted(event)
