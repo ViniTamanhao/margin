@@ -248,7 +248,8 @@ real Electron application against temporary files, substitutes deterministic nat
 dialog results, and checks editing, saving, conflicts, keyboard navigation, window
 closing, contextual syntax, Markdown clipboard behavior, appearance previews, focus
 restoration, Quick Open, palette execution, heading jumps, Back/Forward cursor
-restoration, deleted picker targets and workspace/settings restoration across
+restoration, deleted picker targets, active file/content previews, delayed-response
+races, heading typography, shortcut reference focus, and workspace/settings restoration across
 separate processes. It also bundles a test-only instrumented caller of the real
 Picker to check recomputation, and runs inline creation, rename/undo/history,
 context-menu, conflict-blocking and external watcher workflows. The Trash boundary
@@ -257,6 +258,36 @@ checked, including the unseen-folder warning. No personal files are moved to Tra
 It leaves its temporary artifacts and screenshots in the printed path for inspection.
 
 See [the Sessions 0–2 implementation report](docs/sessions-0-2-report.md) for decisions,
-validation, commit progression and remaining limits. Workspace content search,
-ripgrep, semantic indexing, backlinks, graphs, tabs, split panes, persistent navigation,
-configurable shortcuts, plugins, sync and AI remain deferred.
+validation, commit progression and remaining limits. Semantic indexing, backlinks,
+graphs, tabs, split panes, persistent navigation, configurable shortcuts, plugins,
+sync and AI remain deferred.
+
+## Content search and previews
+
+Quick Open (Ctrl/Cmd+P) searches filenames and relative paths only. Search Workspace
+(Ctrl/Cmd+Shift+F) searches literal text in Markdown files with smart case: lowercase
+queries ignore case, queries containing uppercase letters match case. Results are
+ordered by path, line and column, capped at 100 in the picker (200 at the API boundary).
+Each match carries a workspace-relative path, one-based line/column, and a zero-based
+CodeMirror UTF-16 position. Enter uses the existing navigation session, so Alt+Left
+restores the previous document and cursor.
+
+The replaceable main-process ContentSearchService streams the existing workspace
+file list, validates paths through WorkspaceService, excludes ignored folders and
+symlinks, and yields regularly. No new dependency or system binary is required.
+Bundled ripgrep is deferred until cross-platform binary distribution is established.
+Queries debounce for 100 ms; the typed IPC API explicitly cancels superseded work,
+and the picker rejects stale responses. Unreadable or externally removed files are
+skipped with a developer log; results reflect saved disk text, not unsaved buffers.
+
+Quick Open and content search share an optional Picker preview pane. Only the active
+file is read through document.read after 75 ms; late responses are discarded. Preview
+reads never touch editor sessions, recents, navigation or autosave. Source previews
+show the first 30 lines for files or eight context lines either side of a content
+match. Previews hide below 640 px. Opening a stale search result clamps its saved
+position to the current document; rerun search if external edits moved the match.
+
+Heading typography uses parsed ATX/Setext syntax and stable line decorations,
+independent of contextual marker replacement. The keyboard icon immediately above
+Settings opens a transient reference derived from command definitions; Files-panel
+shortcuts are contextual. Keybindings remain fixed.

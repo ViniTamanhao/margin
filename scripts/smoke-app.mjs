@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import assert from 'node:assert/strict'
 
 const { app, BrowserWindow, dialog } = electron
+const { instrumentSearchIPC } = await import('./smoke-polish.mjs')
+const searchProbe = instrumentSearchIPC(electron.ipcMain)
 const root = process.env.MARGIN_SMOKE_ROOT
 if (!root) throw new Error('Run this through pnpm test:smoke.')
 app.setPath('userData', join(root, 'app-data'))
@@ -104,6 +106,20 @@ async function run() {
       )
       console.log('PASS missing previous workspace')
       app.exit(0)
+    } else if (process.env.MARGIN_SMOKE_MODE === 'polish') {
+      const { runSearchPolish } = await import('./smoke-polish.mjs')
+      await runSearchPolish({
+        window,
+        evaluate,
+        until,
+        screenshot,
+        root,
+        dialog,
+        probe: searchProbe
+      })
+      window.close()
+      await until(() => window.isDestroyed(), 'polish window closes')
+      app.exit(0)
     } else if (process.env.MARGIN_SMOKE_MODE === 'files') {
       const { runFileOperations } = await import('./smoke-files.mjs')
       await runFileOperations({
@@ -192,7 +208,7 @@ async function run() {
         await evaluate(
           "Array.from(document.querySelectorAll('.picker [role=option]')).map(item => item.textContent.split('Ctrl')[0])"
         ),
-        ['Open Folder', 'Settings'],
+        ['Keyboard Shortcuts', 'Open Folder', 'Settings'],
         'unavailable workspace, heading and history commands are hidden'
       )
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
