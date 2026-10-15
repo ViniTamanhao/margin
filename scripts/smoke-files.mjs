@@ -42,9 +42,12 @@ export async function runFileOperations({
     await evaluate(
       `Array.from(document.querySelectorAll('[role=treeitem]')).find(item => item.title === ${JSON.stringify(path)})?.focus()`
     )
+    // DOM focus can change before React commits the target used by toolbar commands.
     await until(
-      async () => (await evaluate('document.activeElement?.title')) === path,
-      `focus ${path}`
+      async () =>
+        await evaluate(`document.activeElement?.title === ${JSON.stringify(path)} &&
+          document.activeElement.getAttribute('aria-selected') === 'true'`),
+      `focus and select ${path}`
     )
   }
   const rootTarget = async () => {
@@ -151,6 +154,10 @@ export async function runFileOperations({
     'inline creation focuses input'
   )
   await key('Escape')
+  await until(
+    async () => await evaluate("!document.querySelector('.tree-inline-edit')"),
+    'Escape closes inline creation before selecting another target'
+  )
   assert.deepEqual(
     await readdir(join(root, 'workspace/Campaign/Notes')),
     [],
