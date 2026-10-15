@@ -14,10 +14,12 @@ import {
 } from './commands'
 import { Icon } from './components/Icon'
 import { FileTree } from './components/FileTree'
+import { QuickOpen } from './components/QuickOpen'
 
 function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): React.JSX.Element {
   const [appearance, setAppearance] = useState(initialAppearance)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [quickOpen, setQuickOpen] = useState(false)
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [controller] = useState(() => new EditorController(window.margin.document))
   const editor = useSyncExternalStore(controller.subscribe, controller.snapshot)
@@ -82,6 +84,11 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       controller.setLocked(false)
     }
   }, [controller])
+  const openFile = (path: string): void => {
+    void controller.open(path).then(() => {
+      if (controller.snapshot().path === path) setFilesExpanded(false)
+    })
+  }
   const toggleFiles = useCallback((): void => {
     setFilesExpanded(!filesExpanded)
     if (filesExpanded) {
@@ -94,6 +101,12 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       // The registry stores handlers; it never invokes them during render.
       // eslint-disable-next-line react-hooks/refs
       createCommandRegistry([
+        {
+          id: 'workspace.quick-open',
+          ...commandDefinitions['workspace.quick-open'],
+          isEnabled: () => Boolean(workspace) && !busy && !editor.locked,
+          execute: () => setQuickOpen(true)
+        },
         {
           id: 'workspace.open',
           ...commandDefinitions['workspace.open'],
@@ -132,7 +145,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
   }, [filesExpanded])
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {
-      if (settingsOpen || event.defaultPrevented) return
+      if (settingsOpen || quickOpen || event.defaultPrevented) return
       if (event.key === 'Escape' && filesExpanded) {
         event.preventDefault()
         setFilesExpanded(false)
@@ -154,7 +167,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       window.removeEventListener('keydown', keydown)
       window.removeEventListener('focus', focus)
     }
-  }, [controller, executeCommand, filesExpanded, settingsOpen])
+  }, [controller, executeCommand, filesExpanded, settingsOpen, quickOpen])
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -228,11 +241,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
                 workspace={workspace}
                 activePath={editor.path}
                 disabled={busy || editor.locked}
-                onOpen={(path) => {
-                  void controller.open(path).then(() => {
-                    if (controller.snapshot().path === path) setFilesExpanded(false)
-                  })
-                }}
+                onOpen={openFile}
               />
             </nav>
           )}
@@ -297,6 +306,9 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           )}
         </section>
       </div>
+      {quickOpen && workspace && (
+        <QuickOpen files={workspace.files} onOpen={openFile} onClose={() => setQuickOpen(false)} />
+      )}
       {settingsOpen && (
         <SettingsDialog
           settings={appearance}

@@ -308,6 +308,64 @@ async function run() {
       await screenshot('editor-files-narrow.png')
       window.setBounds(originalBounds)
       await click('Toggle files')
+      const shortcut = async (keyCode, modifiers = ['control']) => {
+        window.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers })
+        window.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers })
+        await sleep(60)
+      }
+      const pickerQuery = async (query) => {
+        await evaluate(`(() => {
+          const input = document.querySelector('.picker-input');
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(query)});
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        })()`)
+        await sleep(40)
+      }
+      await evaluate("document.querySelector('.cm-content').focus()")
+      await shortcut('p')
+      await until(
+        async () =>
+          await evaluate("document.activeElement?.getAttribute('aria-label') === 'Quick Open'"),
+        'Quick Open takes input focus'
+      )
+      await key('Escape')
+      assert.equal(
+        await evaluate("document.activeElement?.classList.contains('cm-content')"),
+        true,
+        'Quick Open Escape restores editor focus'
+      )
+      await shortcut('p')
+      await pickerQuery('no-such-file')
+      assert.equal(await evaluate("document.querySelectorAll('.picker [role=option]').length"), 0)
+      await key('Return')
+      assert.equal(
+        await evaluate("Boolean(document.querySelector('.picker[open]'))"),
+        true,
+        'Enter with no results keeps picker open'
+      )
+      await pickerQuery('nbm')
+      assert.equal(
+        await evaluate(
+          "document.querySelector('.picker [aria-selected=true]')?.textContent.includes('b.md')"
+        ),
+        true,
+        'fuzzy relative-path match selected'
+      )
+      await screenshot('quick-open.png')
+      await key('Return')
+      await until(
+        async () => (await heading()) === 'nested/b.md',
+        'Quick Open opens nested document'
+      )
+      assert.equal(
+        await evaluate("document.activeElement?.classList.contains('cm-content')"),
+        true,
+        'Quick Open returns to editing'
+      )
+      await shortcut('p')
+      await pickerQuery('a.md')
+      await key('Return')
+      await until(async () => (await heading()) === 'a.md', 'Quick Open returns to first document')
       const markdown = '## Heading\n\n**bold** *italic* `code`\n\nTail\n'
       await writeFile(join(root, 'workspace/a.md'), markdown)
       await until(async () => (await text()).includes('Heading'), 'presentation fixture loaded')
