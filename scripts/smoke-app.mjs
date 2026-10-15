@@ -66,7 +66,7 @@ async function run() {
         for (let index = 1; index < parts.length; index++) {
           const path = parts.slice(0, index).join('/')
           await evaluate(
-            `Array.from(document.querySelectorAll('.file-list button')).find(button => button.title === ${JSON.stringify(path)} && button.getAttribute('aria-expanded') === 'false')?.click()`
+            `Array.from(document.querySelectorAll('.file-list button[role=treeitem]')).find(button => button.title === ${JSON.stringify(path)} && button.getAttribute('aria-expanded') === 'false')?.click()`
           )
           await sleep(20)
         }
@@ -98,12 +98,18 @@ async function run() {
           await evaluate("document.body.textContent.includes('Open a folder. Start writing.')"),
         'missing workspace handled'
       )
-      assert.equal(await evaluate('document.querySelectorAll(".file-list button").length'), 0)
+      assert.equal(
+        await evaluate('document.querySelectorAll(".file-list button[role=treeitem]").length'),
+        0
+      )
       console.log('PASS missing previous workspace')
       app.exit(0)
     } else if (process.env.MARGIN_SMOKE_MODE === 'restore') {
       await until(
-        async () => (await evaluate('document.querySelectorAll(".file-list button").length')) >= 2,
+        async () =>
+          (await evaluate(
+            'document.querySelectorAll(".file-list button[role=treeitem]").length'
+          )) >= 2,
         'workspace restored'
       )
       assert.equal(
@@ -234,7 +240,10 @@ async function run() {
       })
       await click('Open Folder')
       await until(
-        async () => (await evaluate('document.querySelectorAll(".file-list button").length')) === 3,
+        async () =>
+          (await evaluate(
+            'document.querySelectorAll(".file-list button[role=treeitem]").length'
+          )) === 3,
         'folder and Markdown discovery'
       )
       assert.equal(await evaluate("document.querySelector('.file-list').inert"), true)

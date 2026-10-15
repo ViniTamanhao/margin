@@ -1,9 +1,19 @@
 export function Icon({
   name
 }: {
-  name: 'folder' | 'files' | 'settings' | 'close' | 'chevron-right' | 'chevron-down'
+  name:
+    | 'folder'
+    | 'files'
+    | 'settings'
+    | 'close'
+    | 'chevron-right'
+    | 'chevron-down'
+    | 'new-file'
+    | 'new-folder'
 }): React.JSX.Element {
   const paths = {
+    'new-file': 'M6 3h9l4 4v14H6V3Zm9 0v5h4M9 14h7M12.5 10.5v7',
+    'new-folder': 'M3 7V5h6l2 2h10v12H3V7Zm0 3h18M9 14h6M12 11v6',
     folder: 'M3 7V5h6l2 2h10v12H3V7Zm0 3h18',
     files: 'M6 3h9l4 4v14H6V3Zm9 0v5h4M9 12h7M9 16h7',
     settings:

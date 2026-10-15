@@ -8,6 +8,10 @@ interface CommandDefinition {
   alt?: boolean
 }
 export const commandDefinitions = {
+  'workspace.new-file': { title: 'New File' },
+  'workspace.new-folder': { title: 'New Folder' },
+  'workspace.rename': { title: 'Rename' },
+  'workspace.trash': { title: 'Move to Trash' },
   'editor.go-to-heading': { title: 'Go to Heading' },
   'navigation.back': {
     title: 'Go Back',
@@ -35,6 +39,8 @@ export const commandDefinitions = {
   'settings.open': { title: 'Settings', shortcut: 'Ctrl/Cmd+,', key: ',', shift: false }
 } as const satisfies Record<string, CommandDefinition>
 export type CommandId = keyof typeof commandDefinitions
+export type FileTreeCommandId =
+  'workspace.new-file' | 'workspace.new-folder' | 'workspace.rename' | 'workspace.trash'
 
 export interface Command {
   id: CommandId

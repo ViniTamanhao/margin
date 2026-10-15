@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import type { Workspace } from '../../shared/api'
 import { EditorController } from './editor/controller'
 import { EditorSurface } from './editor/EditorSurface'
 import type { AppearanceSettings } from '../../shared/appearance'
@@ -17,40 +16,32 @@ import { FileTree } from './components/FileTree'
 import { QuickOpen } from './components/QuickOpen'
 import { CommandPalette } from './components/CommandPalette'
 import { HeadingPicker } from './components/HeadingPicker'
+import { useWorkspaceFiles } from './useWorkspaceFiles'
 
 function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): React.JSX.Element {
   const [appearance, setAppearance] = useState(initialAppearance)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [picker, setPicker] = useState<'files' | 'commands' | 'headings' | null>(null)
-  const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [controller] = useState(() => new EditorController(window.margin.document))
   const editor = useSyncExternalStore(controller.subscribe, controller.snapshot)
   const [filesExpanded, setFilesExpanded] = useState(false)
   const filesToggle = useRef<HTMLButtonElement>(null)
   const filesPanel = useRef<HTMLElement>(null)
-  const [busy, setBusy] = useState(false)
+  const {
+    workspace,
+    busy,
+    openFolder,
+    error: workspaceError,
+    selection: treeSelection,
+    setSelection: setTreeSelection,
+    editing: treeEditing,
+    setEditing: setTreeEditing,
+    treeRef,
+    beginEdit,
+    commitEdit,
+    trash
+  } = useWorkspaceFiles(controller)
   const [error, setError] = useState('')
-  useEffect(() => {
-    let alive = true
-    const unsubscribe = window.margin.workspace.onChanged((change) => {
-      if (alive) {
-        setWorkspace(change.workspace)
-        void controller.refresh(change.changedPaths)
-      }
-    })
-    void window.margin.workspace
-      .current()
-      .then((workspace) => {
-        if (alive) setWorkspace(workspace)
-      })
-      .catch(() => {
-        if (alive) setError('Could not restore the workspace. Open a folder to continue.')
-      })
-    return () => {
-      alive = false
-      unsubscribe()
-    }
-  }, [controller])
   useEffect(
     () =>
       window.margin.window.onClosing(() => {
@@ -68,24 +59,6 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       }),
     [controller]
   )
-  const openFolder = useCallback(async (): Promise<void> => {
-    controller.setLocked(true)
-    setBusy(true)
-    setError('')
-    try {
-      if (!(await controller.flush())) return
-      const next = await window.margin.workspace.open()
-      if (next) {
-        setWorkspace(next)
-        controller.reset()
-      }
-    } catch {
-      setError('Could not open this folder. Check that it is accessible.')
-    } finally {
-      setBusy(false)
-      controller.setLocked(false)
-    }
-  }, [controller])
   const openFile = (path: string): void => {
     void controller.open(path).then((opened) => {
       if (opened) setFilesExpanded(false)
@@ -103,6 +76,39 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       // The registry stores handlers; it never invokes them during render.
       // eslint-disable-next-line react-hooks/refs
       createCommandRegistry([
+        {
+          id: 'workspace.new-file',
+          ...commandDefinitions['workspace.new-file'],
+          isEnabled: () => Boolean(workspace) && !busy && !editor.locked && !treeEditing,
+          execute: () => {
+            setFilesExpanded(true)
+            beginEdit('new-file')
+          }
+        },
+        {
+          id: 'workspace.new-folder',
+          ...commandDefinitions['workspace.new-folder'],
+          isEnabled: () => Boolean(workspace) && !busy && !editor.locked && !treeEditing,
+          execute: () => {
+            setFilesExpanded(true)
+            beginEdit('new-folder')
+          }
+        },
+        {
+          id: 'workspace.rename',
+          ...commandDefinitions['workspace.rename'],
+          isEnabled: () => Boolean(treeSelection) && !busy && !editor.locked && !treeEditing,
+          execute: () => {
+            setFilesExpanded(true)
+            beginEdit('rename')
+          }
+        },
+        {
+          id: 'workspace.trash',
+          ...commandDefinitions['workspace.trash'],
+          isEnabled: () => Boolean(treeSelection) && !busy && !editor.locked && !treeEditing,
+          execute: trash
+        },
         {
           id: 'editor.go-to-heading',
           ...commandDefinitions['editor.go-to-heading'],
@@ -158,6 +164,10 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       ]),
     [
       busy,
+      treeEditing,
+      treeSelection,
+      beginEdit,
+      trash,
       editor.locked,
       editor.path,
       editor.status,
@@ -180,11 +190,14 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
   )
   useEffect(() => {
     if (filesExpanded)
-      filesPanel.current?.querySelector<HTMLButtonElement>('[tabindex="0"]')?.focus()
+      filesPanel.current
+        ?.querySelector<HTMLElement>('.tree-inline-edit input, [tabindex="0"]')
+        ?.focus()
   }, [filesExpanded])
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {
       if (settingsOpen || picker || event.defaultPrevented) return
+      if (event.target instanceof HTMLElement && event.target.closest('.tree-inline-edit')) return
       if (event.key === 'Escape' && filesExpanded) {
         event.preventDefault()
         setFilesExpanded(false)
@@ -237,6 +250,11 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           {error}
         </p>
       )}
+      {workspaceError && (
+        <p className="notice" role="alert">
+          {workspaceError}
+        </p>
+      )}
       {workspace?.warnings.map((warning) => (
         <p className="notice" key={warning}>
           {warning}
@@ -277,9 +295,15 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
               tabIndex={-1}
             >
               <FileTree
+                ref={treeRef}
                 key={workspace.root}
                 workspace={workspace}
                 activePath={editor.path}
+                selection={treeSelection}
+                onSelect={setTreeSelection}
+                onCommand={executeCommand}
+                onCommit={commitEdit}
+                onEditingChange={setTreeEditing}
                 disabled={busy || editor.locked}
                 onOpen={openFile}
               />

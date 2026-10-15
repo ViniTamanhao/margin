@@ -83,13 +83,14 @@
 .file-list {
   width: 100%;
   height: 100%;
-  overflow: auto;
-  padding: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-right: 1px solid var(--margin-border);
   background: var(--margin-surface);
   font-size: var(--ui-font-size-sm);
 }
-.file-list button {
+.file-list .file-tree-item {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
@@ -102,10 +103,10 @@
   border-radius: var(--radius-sm);
   background: transparent;
 }
-.file-list button:not([aria-disabled='true']):hover:not([aria-current='page']) {
+.file-list button.file-tree-item:not([aria-disabled='true']):hover:not([aria-selected='true']) {
   background: var(--margin-hover);
 }
-.file-list button[aria-current='page'] {
+.file-list .file-tree-item[aria-selected='true'] {
   background: var(--margin-selection);
 }
 .file-list .file-tree-item {
