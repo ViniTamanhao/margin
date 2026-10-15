@@ -1,5 +1,5 @@
 import electron from 'electron'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
 
@@ -34,6 +34,13 @@ async function run() {
     window.show()
     window.focus()
     const evaluate = (code) => window.webContents.executeJavaScript(code)
+    // Capturing a frame advances Chromium's compositor even when the desktop
+    // occludes the test window. Measure rendered geometry rather than a stale frame.
+    const measure = async (code) => {
+      await window.capturePage()
+      return evaluate(code)
+    }
+
     const screenshot = async (name) => {
       window.show()
       window.focus()
@@ -54,8 +61,18 @@ async function run() {
           await sleep(160)
         }
       }
+      if (label.includes('/') && label.endsWith('.md')) {
+        const parts = label.split('/')
+        for (let index = 1; index < parts.length; index++) {
+          const path = parts.slice(0, index).join('/')
+          await evaluate(
+            `Array.from(document.querySelectorAll('.file-list button[role=treeitem]')).find(button => button.title === ${JSON.stringify(path)} && button.getAttribute('aria-expanded') === 'false')?.click()`
+          )
+          await sleep(20)
+        }
+      }
       return evaluate(
-        `Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === ${JSON.stringify(label)} || button.getAttribute('aria-label') === ${JSON.stringify(label)})?.click()`
+        `Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === ${JSON.stringify(label)} || button.getAttribute('aria-label') === ${JSON.stringify(label)} || button.title === ${JSON.stringify(label)})?.click()`
       )
     }
     const text = () => evaluate("document.querySelector('.cm-content')?.textContent ?? ''")
@@ -81,12 +98,32 @@ async function run() {
           await evaluate("document.body.textContent.includes('Open a folder. Start writing.')"),
         'missing workspace handled'
       )
-      assert.equal(await evaluate('document.querySelectorAll(".file-list button").length'), 0)
+      assert.equal(
+        await evaluate('document.querySelectorAll(".file-list button[role=treeitem]").length'),
+        0
+      )
       console.log('PASS missing previous workspace')
+      app.exit(0)
+    } else if (process.env.MARGIN_SMOKE_MODE === 'files') {
+      const { runFileOperations } = await import('./smoke-files.mjs')
+      await runFileOperations({
+        window,
+        evaluate,
+        until,
+        screenshot,
+        root,
+        dialog,
+        shell: electron.shell
+      })
+      window.close()
+      await until(() => window.isDestroyed(), 'file operations window closes safely')
       app.exit(0)
     } else if (process.env.MARGIN_SMOKE_MODE === 'restore') {
       await until(
-        async () => (await evaluate('document.querySelectorAll(".file-list button").length')) >= 2,
+        async () =>
+          (await evaluate(
+            'document.querySelectorAll(".file-list button[role=treeitem]").length'
+          )) >= 2,
         'workspace restored'
       )
       assert.equal(
@@ -130,7 +167,41 @@ async function run() {
         'Margin',
         'top bar shows the wordmark when no document is open'
       )
+      assert.equal(
+        await evaluate("getComputedStyle(document.querySelector('.navigation-rail')).borderRight"),
+        await evaluate("getComputedStyle(document.querySelector('.app-header')).borderBottom"),
+        'sidebar divider matches top bar'
+      )
       await screenshot('empty-start.png')
+      window.webContents.sendInputEvent({
+        type: 'keyDown',
+        keyCode: 'p',
+        modifiers: ['control', 'shift']
+      })
+      window.webContents.sendInputEvent({
+        type: 'keyUp',
+        keyCode: 'p',
+        modifiers: ['control', 'shift']
+      })
+      await until(
+        async () =>
+          await evaluate('document.querySelector(\'.picker[aria-label="Command Palette"]\')?.open'),
+        'palette opens without workspace'
+      )
+      assert.deepEqual(
+        await evaluate(
+          "Array.from(document.querySelectorAll('.picker [role=option]')).map(item => item.textContent.split('Ctrl')[0])"
+        ),
+        ['Open Folder', 'Settings'],
+        'unavailable workspace, heading and history commands are hidden'
+      )
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+      await until(
+        async () => await evaluate("!document.querySelector('.picker')"),
+        'empty workspace palette closes'
+      )
+
       dialog.showOpenDialog = async () => ({
         canceled: false,
         filePaths: [join(root, 'empty-workspace')]
@@ -142,6 +213,30 @@ async function run() {
       )
       await click('Toggle files')
       await screenshot('empty-files.png')
+      await evaluate(`document.querySelector('[aria-label="Toggle files"]').focus()`)
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'p', modifiers: ['control'] })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'p', modifiers: ['control'] })
+      await until(
+        async () => await evaluate("document.querySelector('.picker')?.open"),
+        'Quick Open opens from sidebar control'
+      )
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+      await until(
+        async () => await evaluate("!document.querySelector('.picker')"),
+        'Quick Open closes from sidebar control'
+      )
+      assert.equal(
+        await evaluate("document.activeElement.getAttribute('aria-label')"),
+        'Toggle files',
+        'picker Escape restores the prior non-editor control'
+      )
+      assert.equal(
+        await evaluate("document.querySelector('.file-list').inert"),
+        false,
+        'picker Escape leaves the underlying sidebar open'
+      )
+
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
       window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
       await until(
@@ -159,8 +254,11 @@ async function run() {
       })
       await click('Open Folder')
       await until(
-        async () => (await evaluate('document.querySelectorAll(".file-list button").length')) === 2,
-        'recursive Markdown discovery'
+        async () =>
+          (await evaluate(
+            'document.querySelectorAll(".file-list button[role=treeitem]").length'
+          )) === 3,
+        'folder and Markdown discovery'
       )
       assert.equal(await evaluate("document.querySelector('.file-list').inert"), true)
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'b', modifiers: ['control'] })
@@ -183,7 +281,7 @@ async function run() {
       )
       await until(
         async () =>
-          await evaluate("document.querySelector('.file-panel').getBoundingClientRect().width < 1"),
+          await measure("document.querySelector('.file-panel').getBoundingClientRect().width < 1"),
         'collapse animation completes'
       )
       const editorBounds = await evaluate(
@@ -192,7 +290,7 @@ async function run() {
       await click('Toggle files')
       await until(
         async () =>
-          await evaluate(
+          await measure(
             "document.querySelector('.file-panel').getBoundingClientRect().width > 100"
           ),
         'expansion completes'
@@ -206,13 +304,35 @@ async function run() {
       assert.ok(layout.editorLeft > editorBounds, 'expanding files moves the editor')
       assert.ok(Math.abs(layout.filesRight - layout.editorLeft) < 1, 'files never cover the editor')
       await screenshot('files.png')
-      await evaluate("document.querySelector('.file-list button').focus()")
-      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Down' })
-      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Down' })
-      await until(
-        async () => await evaluate("document.activeElement.textContent === 'nested/b.md'"),
-        'file-list arrow navigation'
+      const key = async (keyCode) => {
+        window.webContents.sendInputEvent({ type: 'keyDown', keyCode })
+        window.webContents.sendInputEvent({ type: 'keyUp', keyCode })
+        await sleep(40)
+      }
+      assert.equal(await evaluate("document.querySelector('[role=treeitem]').textContent"), 'empty')
+      assert.equal(
+        await evaluate('document.querySelector(\'[role=treeitem][aria-level="2"]\')'),
+        null
       )
+      await evaluate('document.querySelector(\'.file-list [tabindex="0"]\').focus()')
+      await key('Down')
+      assert.equal(await evaluate('document.activeElement.title'), 'nested')
+      await key('Right')
+      assert.equal(await evaluate("document.activeElement.getAttribute('aria-expanded')"), 'true')
+      await key('Right')
+      assert.equal(await evaluate('document.activeElement.title'), 'nested/b.md')
+      await key('Left')
+      assert.equal(await evaluate('document.activeElement.title'), 'nested')
+      await key('Left')
+      assert.equal(await evaluate("document.activeElement.getAttribute('aria-expanded')"), 'false')
+      assert.equal(
+        await evaluate('document.querySelector(\'[role=treeitem][aria-level="2"]\')'),
+        null
+      )
+      await key('Right')
+      await key('Down')
+      assert.equal(await evaluate('document.activeElement.title'), 'nested/b.md')
+      await screenshot('folder-tree.png')
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Return' })
       window.webContents.sendInputEvent({ type: 'char', keyCode: '\r' })
       window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Return' })
@@ -244,7 +364,12 @@ async function run() {
       )
       await click('a.md')
       await until(async () => (await text()).includes('# Original'), 'document opens')
-      await sleep(160)
+      await until(
+        async () =>
+          (await measure("document.querySelector('.writing-pane').getBoundingClientRect().x")) ===
+          editorBounds,
+        'file opening finishes collapsing the sidebar'
+      )
       assert.equal(
         await evaluate("document.querySelector('.writing-pane').getBoundingClientRect().x"),
         editorBounds,
@@ -271,6 +396,263 @@ async function run() {
       await screenshot('editor-files-narrow.png')
       window.setBounds(originalBounds)
       await click('Toggle files')
+      const shortcut = async (keyCode, modifiers = ['control']) => {
+        window.webContents.sendInputEvent({ type: 'keyDown', keyCode, modifiers })
+        window.webContents.sendInputEvent({ type: 'keyUp', keyCode, modifiers })
+        await sleep(60)
+      }
+      const pickerQuery = async (query) => {
+        await evaluate(`(() => {
+          const input = document.querySelector('.picker-input');
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(query)});
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        })()`)
+        await sleep(40)
+      }
+      await evaluate("document.querySelector('.cm-content').focus()")
+      await shortcut('p')
+      await until(
+        async () =>
+          await evaluate("document.activeElement?.getAttribute('aria-label') === 'Quick Open'"),
+        'Quick Open takes input focus'
+      )
+      const selectedOption = () =>
+        evaluate(
+          "document.querySelector('.picker-input').getAttribute('aria-activedescendant') === document.querySelector('.picker [aria-selected=true]')?.id"
+        )
+      await key('Down')
+      assert.equal(
+        await selectedOption(),
+        true,
+        'keyboard selection is exposed to accessibility APIs'
+      )
+      await key('Up')
+      await evaluate(
+        "document.querySelectorAll('.picker [role=option]')[1].dispatchEvent(new MouseEvent('mousemove', { bubbles: true }))"
+      )
+      assert.equal(await selectedOption(), true, 'mouse selection uses the same active option')
+      await key('Up')
+      assert.equal(await selectedOption(), true, 'keyboard continues from mouse selection')
+      await key('Tab')
+      assert.equal(
+        await evaluate("document.querySelector('.picker').contains(document.activeElement)"),
+        true,
+        'picker traps focus'
+      )
+
+      await key('Escape')
+      assert.equal(
+        await evaluate("document.activeElement?.classList.contains('cm-content')"),
+        true,
+        'Quick Open Escape restores editor focus'
+      )
+      await shortcut('p')
+      await pickerQuery('no-such-file')
+      assert.equal(await evaluate("document.querySelectorAll('.picker [role=option]').length"), 0)
+      await key('Return')
+      assert.equal(
+        await evaluate("Boolean(document.querySelector('.picker[open]'))"),
+        true,
+        'Enter with no results keeps picker open'
+      )
+      await pickerQuery('nbm')
+      assert.equal(
+        await evaluate(
+          "document.querySelector('.picker [aria-selected=true]')?.textContent.includes('b.md')"
+        ),
+        true,
+        'fuzzy relative-path match selected'
+      )
+      await screenshot('quick-open.png')
+      await key('Return')
+      await until(
+        async () => (await heading()) === 'nested/b.md',
+        'Quick Open opens nested document'
+      )
+      assert.equal(
+        await evaluate("document.activeElement?.classList.contains('cm-content')"),
+        true,
+        'Quick Open returns to editing'
+      )
+      await shortcut('p')
+      await pickerQuery('a.md')
+      await key('Return')
+      await until(async () => (await heading()) === 'a.md', 'Quick Open returns to first document')
+      await shortcut('Home')
+      await key('Right')
+      await key('Right')
+      const cursor = () =>
+        evaluate(
+          `({ text: window.getSelection()?.anchorNode?.textContent, offset: window.getSelection()?.anchorOffset })`
+        )
+      const originalCursor = await cursor()
+      await shortcut('p')
+      assert.equal(
+        await evaluate(
+          "document.querySelector('.picker [aria-selected=true]')?.textContent.includes('a.md')"
+        ),
+        true,
+        'empty Quick Open prefers most recent file'
+      )
+      await pickerQuery('b.md')
+      await key('Return')
+      await until(async () => (await heading()) === 'nested/b.md', 'history target opened')
+      await shortcut('End')
+      const secondCursor = await cursor()
+      await shortcut('Left', ['alt'])
+      await until(async () => (await heading()) === 'a.md', 'Alt+Left returns to previous document')
+      assert.deepEqual(await cursor(), originalCursor, 'Back restores cursor location')
+      await shortcut('Right', ['alt'])
+      await until(
+        async () => (await heading()) === 'nested/b.md',
+        'Alt+Right restores next document'
+      )
+      assert.deepEqual(await cursor(), secondCursor, 'Forward restores cursor location')
+      await shortcut('Left', ['alt'])
+      await until(async () => (await heading()) === 'a.md', 'history returns to first document')
+      await shortcut('p', ['control', 'shift'])
+      await pickerQuery('stgs')
+      await key('Return')
+      await until(
+        async () => await evaluate("document.querySelector('.settings-dialog')?.open"),
+        'palette executes Settings through registry'
+      )
+      await key('Escape')
+      assert.equal(
+        await evaluate("document.activeElement?.classList.contains('cm-content')"),
+        true,
+        'palette to Settings cancellation returns to editor'
+      )
+      await shortcut('p', ['control', 'shift'])
+      await pickerQuery('qop')
+      await key('Return')
+      await until(
+        async () =>
+          await evaluate("document.activeElement?.getAttribute('aria-label') === 'Quick Open'"),
+        'palette can open another picker'
+      )
+      await pickerQuery('b.md')
+      await key('Return')
+      await until(
+        async () => (await heading()) === 'nested/b.md',
+        'palette to Quick Open opens file'
+      )
+      await shortcut('Home')
+      await key('Right')
+      await key('Right')
+      const beforeHeadingCursor = await cursor()
+      await shortcut('p', ['control', 'shift'])
+      await pickerQuery('gth')
+      await key('Return')
+      await until(
+        async () =>
+          await evaluate("document.activeElement?.getAttribute('aria-label') === 'Go to Heading'"),
+        'palette opens Go to Heading'
+      )
+      await pickerQuery('armor')
+      await until(
+        async () =>
+          await evaluate(
+            "document.querySelector('.picker [aria-selected=true]')?.textContent === 'Interaction with ArmorH2'"
+          ),
+        'heading text fuzzy match and level'
+      )
+      await screenshot('go-to-heading.png')
+      await key('Return')
+      await until(
+        async () =>
+          await evaluate(`(() => {
+        const node = window.getSelection()?.anchorNode;
+        const element = node?.nodeType === 3 ? node.parentElement : node;
+        return element?.closest('.cm-line')?.textContent.includes('Interaction with Armor');
+      })()`),
+        'cursor jumps to heading'
+      )
+      assert.equal(
+        await evaluate("document.activeElement?.classList.contains('cm-content')"),
+        true,
+        'heading jump focuses editor'
+      )
+      await sleep(120)
+      assert.ok(
+        await evaluate("document.querySelector('.cm-scroller').scrollTop > 100"),
+        'heading jump scrolls distant target into view'
+      )
+      const armorCursor = await cursor()
+      await shortcut('Left', ['alt'])
+      assert.deepEqual(
+        await cursor(),
+        beforeHeadingCursor,
+        'Back from heading restores prior location in same file'
+      )
+      await shortcut('Left', ['alt'])
+      await until(async () => (await heading()) === 'a.md', 'second Back reaches first document')
+      assert.deepEqual(
+        await cursor(),
+        originalCursor,
+        'second Back restores original document cursor'
+      )
+      await shortcut('Right', ['alt'])
+      await until(
+        async () => (await heading()) === 'nested/b.md',
+        'Forward reopens second document'
+      )
+      assert.deepEqual(await cursor(), beforeHeadingCursor)
+      await shortcut('Right', ['alt'])
+      assert.deepEqual(await cursor(), armorCursor, 'Forward returns to heading')
+      await shortcut('Left', ['alt'])
+      await shortcut('p')
+      await pickerQuery('a.md')
+      await key('Return')
+      await until(async () => (await heading()) === 'a.md', 'new navigation after Back')
+      await shortcut('p', ['control', 'shift'])
+      await pickerQuery('go forward')
+      assert.equal(
+        await evaluate("document.querySelectorAll('.picker [role=option]').length"),
+        0,
+        'new navigation clears Forward command availability'
+      )
+      await key('Escape')
+      await writeFile(join(root, 'workspace/vanished.md'), '# Temporary')
+      await until(
+        async () =>
+          (await evaluate('window.margin.workspace.current()')).files.includes('vanished.md'),
+        'stale file fixture discovered'
+      )
+      await shortcut('p')
+      await pickerQuery('vanished')
+      await until(
+        async () =>
+          await evaluate("document.querySelectorAll('.picker [role=option]').length === 1"),
+        'stale file initially selectable'
+      )
+      await rm(join(root, 'workspace/vanished.md'))
+      await key('Return')
+      await until(
+        async () =>
+          await evaluate("document.body.textContent.includes('Could not open “vanished.md”')"),
+        'deleted picker target fails gracefully'
+      )
+      assert.equal(await heading(), 'a.md', 'deleted target preserves current document')
+      assert.equal(
+        await evaluate("document.activeElement?.classList.contains('cm-content')"),
+        true,
+        'deleted target restores editor focus'
+      )
+      await until(
+        async () =>
+          !(await evaluate('window.margin.workspace.current()')).files.includes('vanished.md'),
+        'deleted file removed from workspace'
+      )
+      await shortcut('p')
+      await pickerQuery('vanished')
+      assert.equal(
+        await evaluate("document.querySelectorAll('.picker [role=option]').length"),
+        0,
+        'deleted file absent from Quick Open'
+      )
+      await pickerQuery('a.md')
+      await key('Return')
       const markdown = '## Heading\n\n**bold** *italic* `code`\n\nTail\n'
       await writeFile(join(root, 'workspace/a.md'), markdown)
       await until(async () => (await text()).includes('Heading'), 'presentation fixture loaded')
@@ -540,7 +922,7 @@ async function run() {
         (await readFile(join(root, 'workspace/nested/b.md'), 'utf8')).includes('flush before close')
       )
       console.log(
-        'PASS compact chrome, temporary rail, syntax hiding/reveal, Markdown clipboard, live appearance, focus restoration, isolated preload, editing, autosave, undo/redo, external reload/conflicts, recovery copy and close flush'
+        'PASS Quick Open, command palette, heading jumps, location history, recents, stale files, compact chrome, temporary rail, syntax hiding/reveal, Markdown clipboard, live appearance, focus restoration, isolated preload, editing, autosave, undo/redo, external reload/conflicts, recovery copy and close flush'
       )
       app.exit(0)
     }

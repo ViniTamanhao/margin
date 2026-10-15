@@ -1,6 +1,16 @@
-import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { dirname, join } from 'node:path'
-import { channels, type MarginAPI, type Workspace, type SaveRequest } from '../shared/api'
+import {
+  channels,
+  type MarginAPI,
+  type Workspace,
+  type SaveRequest,
+  type WorkspaceCreateRequest,
+  type WorkspaceItemRequest,
+  type WorkspaceRenameRequest,
+  type WorkspaceMutation,
+  type WorkspaceResult
+} from '../shared/api'
 import { confirmWindowClose } from './window-lifecycle'
 import { WorkspaceService } from './services/workspace'
 import { AppStateService } from './services/app-state'
@@ -8,7 +18,7 @@ import { AppearanceService } from './services/appearance'
 import { DocumentService } from './services/documents'
 
 export function registerIPC(version: string, stateFile: string): WorkspaceService {
-  const workspaces = new WorkspaceService()
+  const workspaces = new WorkspaceService((path) => shell.trashItem(path))
   const state = new AppStateService(stateFile)
   const appearance = new AppearanceService(join(dirname(stateFile), 'appearance.json'))
   const remember = async (workspace: Workspace): Promise<void> => {
@@ -43,6 +53,29 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
     appearance: { read: () => appearance.read(), save: (settings) => appearance.save(settings) },
     window: { onClosing: () => () => {}, confirmClose: async () => {} },
     workspace: {
+      createFile: (request) => workspaces.createFile(request),
+      createFolder: (request) => workspaces.createFolder(request),
+      rename: (request) => workspaces.rename(request),
+      trash: (request) =>
+        workspaces.trash(request, async (entry) => {
+          const name = entry.path.slice(entry.path.lastIndexOf('/') + 1)
+          const confirmation = await dialog.showMessageBox({
+            type: 'warning',
+            buttons: ['Cancel', 'Move to Trash'],
+            defaultId: 0,
+            cancelId: 0,
+            noLink: true,
+            message:
+              entry.kind === 'directory'
+                ? `Move “${name}” and all of its contents to Trash?`
+                : `Move “${name}” to Trash?`,
+            detail:
+              entry.kind === 'directory'
+                ? 'The folder may contain files that Margin does not display.'
+                : undefined
+          })
+          return confirmation.response === 1
+        }),
       current: async () => {
         await restored
         return workspaces.current()
@@ -102,6 +135,61 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
   ipcMain.handle(channels.workspaceCurrent, (event) => {
     trusted(event)
     return api.workspace.current()
+  })
+  const invalidWorkspaceRequest: WorkspaceResult<WorkspaceMutation> = {
+    ok: false,
+    error: {
+      code: 'invalid-path',
+      message: 'Choose a valid name and item in the current workspace.'
+    }
+  }
+  const createRequest = (input: unknown): input is WorkspaceCreateRequest => {
+    if (!input || typeof input !== 'object') return false
+    return (
+      'root' in input &&
+      typeof input.root === 'string' &&
+      'parentPath' in input &&
+      typeof input.parentPath === 'string' &&
+      'name' in input &&
+      typeof input.name === 'string'
+    )
+  }
+  const renameRequest = (input: unknown): input is WorkspaceRenameRequest => {
+    if (!input || typeof input !== 'object') return false
+    return (
+      'root' in input &&
+      typeof input.root === 'string' &&
+      'path' in input &&
+      typeof input.path === 'string' &&
+      'name' in input &&
+      typeof input.name === 'string'
+    )
+  }
+  const itemRequest = (input: unknown): input is WorkspaceItemRequest => {
+    return Boolean(
+      input &&
+      typeof input === 'object' &&
+      'root' in input &&
+      typeof input.root === 'string' &&
+      'path' in input &&
+      typeof input.path === 'string'
+    )
+  }
+  ipcMain.handle(channels.workspaceTrash, (event, input: unknown) => {
+    trusted(event)
+    return itemRequest(input) ? api.workspace.trash(input) : invalidWorkspaceRequest
+  })
+  ipcMain.handle(channels.workspaceCreateFile, (event, input: unknown) => {
+    trusted(event)
+    return createRequest(input) ? api.workspace.createFile(input) : invalidWorkspaceRequest
+  })
+  ipcMain.handle(channels.workspaceCreateFolder, (event, input: unknown) => {
+    trusted(event)
+    return createRequest(input) ? api.workspace.createFolder(input) : invalidWorkspaceRequest
+  })
+  ipcMain.handle(channels.workspaceRename, (event, input: unknown) => {
+    trusted(event)
+    return renameRequest(input) ? api.workspace.rename(input) : invalidWorkspaceRequest
   })
   ipcMain.handle(channels.documentRead, (event, path: unknown) => {
     trusted(event)

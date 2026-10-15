@@ -3,6 +3,14 @@ import { EditorView, keymap, drawSelection } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { contextualMarkdown } from './markdown-presentation'
+import { extractHeadings, type HeadingSnapshot } from './headings'
+import {
+  NavigationSession,
+  type NavigationLocation,
+  type NavigationDirection
+} from '../navigation/session'
+import { isWithinPath, remapPath } from '../../../shared/workspace-paths'
+import type { WorkspaceChange, WorkspaceMutation, WorkspaceResult } from '../../../shared/api'
 import type { MarginAPI, DocumentSnapshot } from '../../../shared/api'
 
 type DocumentStatus = 'saved' | 'dirty' | 'saving' | 'conflict' | 'missing' | 'error'
@@ -21,10 +29,18 @@ export interface EditorPresentation {
   status: DocumentStatus | 'idle'
   error: string
   openError: string
+  canGoBack: boolean
+  canGoForward: boolean
+  recents: readonly string[]
 }
 
 // CodeMirror owns documents, selections and history; React only subscribes to presentation.
 export class EditorController {
+  private headingVersion = 0
+  private headingSource: { path: string; doc: Text; version: number } | null = null
+  private changingWorkspace = false
+  private deferredRefresh = false
+  private navigation = new NavigationSession()
   private sessions = new Map<string, EditorSession>()
   private view: EditorView | null = null
   private generation = 0
@@ -36,7 +52,10 @@ export class EditorController {
     status: 'idle',
     error: '',
     openError: '',
-    locked: false
+    locked: false,
+    canGoBack: false,
+    canGoForward: false,
+    recents: []
   }
 
   constructor(private readonly api: MarginAPI['document']) {}
@@ -56,7 +75,10 @@ export class EditorController {
       next.path === this.presentation.path &&
       next.status === this.presentation.status &&
       next.error === this.presentation.error &&
-      next.openError === this.presentation.openError
+      next.openError === this.presentation.openError &&
+      next.canGoBack === this.presentation.canGoBack &&
+      next.canGoForward === this.presentation.canGoForward &&
+      next.recents === this.presentation.recents
     )
       return
     this.presentation = next
@@ -123,14 +145,192 @@ export class EditorController {
     this.view?.focus()
   }
 
-  async open(path: string): Promise<void> {
+  location(): NavigationLocation | null {
+    const path = this.presentation.path
+    const session = path ? this.sessions.get(path) : undefined
+    return path && session ? { path, position: session.state.selection.main.head } : null
+  }
+
+  applyWorkspaceOperation(operation: WorkspaceChange['operation']): void {
+    if (!operation) return
+    this.generation++
+    if (operation.kind === 'rename') {
+      for (const [path, session] of [...this.sessions]) {
+        if (!isWithinPath(path, operation.from)) continue
+        clearTimeout(session.timer)
+        this.sessions.delete(path)
+        const next = remapPath(path, operation.from, operation.to)
+        this.sessions.set(next, session)
+        this.schedule(next, session)
+      }
+      this.navigation.remap(operation.from, operation.to)
+      if (this.headingSource)
+        this.headingSource.path = remapPath(this.headingSource.path, operation.from, operation.to)
+      if (this.presentation.path)
+        this.present({ path: remapPath(this.presentation.path, operation.from, operation.to) })
+    } else {
+      this.navigation.remove(operation.path)
+      for (const [path, session] of this.sessions) {
+        if (!isWithinPath(path, operation.path)) continue
+        clearTimeout(session.timer)
+        this.sessions.delete(path)
+      }
+      if (this.headingSource && isWithinPath(this.headingSource.path, operation.path))
+        this.headingSource = null
+      if (this.presentation.path && isWithinPath(this.presentation.path, operation.path)) {
+        this.present({ path: null, status: 'idle', error: '', openError: '' })
+        this.view?.setState(this.state(''))
+      }
+    }
+    this.presentNavigation()
+  }
+
+  async changeWorkspaceItem(
+    path: string,
+    operation: 'rename' | 'trash',
+    execute: () => Promise<WorkspaceResult<WorkspaceMutation | null>>,
+    destination?: string
+  ): Promise<WorkspaceResult<WorkspaceMutation | null>> {
+    if (this.locked)
+      return {
+        ok: false,
+        error: { code: 'changed', message: 'Wait for the current operation to finish.' }
+      }
+    if (
+      operation === 'rename' &&
+      destination &&
+      [...this.sessions.keys()].some(
+        (cached) => !isWithinPath(cached, path) && isWithinPath(cached, destination)
+      )
+    ) {
+      return {
+        ok: false,
+        error: {
+          code: 'collision',
+          message:
+            'The destination still has an open editor session. Resolve or save it before reusing this name.'
+        }
+      }
+    }
+    this.setLocked(true)
+    const blocked: WorkspaceResult<WorkspaceMutation | null> = {
+      ok: false,
+      error: {
+        code: 'changed',
+        message: `Resolve or save the affected document before ${operation === 'rename' ? 'renaming this item' : 'moving this item to Trash'}.`
+      }
+    }
+    try {
+      const affected = [...this.sessions.keys()].filter((cached) => isWithinPath(cached, path))
+      for (const cached of affected) {
+        const session = this.sessions.get(cached)!
+        if (session.saving) await session.saving
+        await this.refresh([cached])
+        if (['conflict', 'missing', 'error'].includes(session.status)) return blocked
+        if (!(await this.save(cached))) return blocked
+      }
+      // Delay watcher refreshes until old cache keys have been remapped or removed.
+      this.changingWorkspace = true
+      const result = await execute()
+      if (result.ok && result.value) this.applyWorkspaceOperation(result.value.change.operation)
+      return result
+    } catch (error) {
+      console.error('Workspace item operation failed.', error)
+      return {
+        ok: false,
+        error: {
+          code: 'filesystem',
+          message: 'Could not change this item. Check that the folder is accessible and try again.'
+        }
+      }
+    } finally {
+      this.changingWorkspace = false
+      this.setLocked(false)
+      if (this.deferredRefresh) {
+        this.deferredRefresh = false
+        await this.refresh()
+      }
+    }
+  }
+
+  async headings(signal?: AbortSignal): Promise<HeadingSnapshot | null> {
+    const path = this.presentation.path
+    const session = path ? this.sessions.get(path) : undefined
+    if (!path || !session) return null
+    const source = { path, doc: session.state.doc, version: ++this.headingVersion }
+    this.headingSource = source
+    const isCancelled = (): boolean =>
+      Boolean(signal?.aborted) ||
+      this.headingSource !== source ||
+      this.presentation.path !== path ||
+      this.sessions.get(path)?.state.doc !== source.doc
+    const headings = await extractHeadings(session.state, isCancelled)
+    return headings && !isCancelled() ? { path, version: source.version, headings } : null
+  }
+
+  jumpToHeading(version: number, position: number): boolean {
+    const source = this.headingSource
+    const session = source ? this.sessions.get(source.path) : undefined
+    if (this.locked) return false
+    if (
+      !source ||
+      !session ||
+      source.version !== version ||
+      this.presentation.path !== source.path ||
+      session.state.doc !== source.doc
+    ) {
+      this.present({ openError: 'This document changed. Reopen Go to Heading.' })
+      return false
+    }
+    const previous = this.location()
+    const anchor = Math.max(0, Math.min(session.state.doc.length, Math.trunc(position)))
+    this.generation++
+    const transaction = {
+      selection: { anchor },
+      effects: EditorView.scrollIntoView(anchor, { y: 'center' })
+    }
+    if (this.view) this.view.dispatch(transaction)
+    else session.state = session.state.update(transaction).state
+    this.navigation.record(previous, { path: source.path, position: anchor })
+    this.present({ openError: '' })
+    this.presentNavigation()
+    this.focus()
+    return true
+  }
+
+  private presentNavigation(): void {
+    this.present({
+      canGoBack: Boolean(this.navigation.target('back')),
+      canGoForward: Boolean(this.navigation.target('forward')),
+      recents: this.navigation.recents
+    })
+  }
+
+  open(path: string): Promise<boolean> {
+    return this.openDocument(path, 'record')
+  }
+
+  async navigate(direction: NavigationDirection): Promise<void> {
+    const target = this.navigation.target(direction)
+    if (target) await this.openDocument(target.path, direction, target.position)
+  }
+
+  private async openDocument(
+    path: string,
+    history: 'record' | 'none' | NavigationDirection,
+    position?: number
+  ): Promise<boolean> {
+    if (this.locked && history !== 'none') return false
     const generation = ++this.generation
-    const previous = this.presentation.path
     try {
       let session = this.sessions.get(path)
+      if (session && path !== this.presentation.path && history !== 'none') {
+        await this.refresh([path])
+        if (session.status === 'missing') throw new Error('Document unavailable.')
+      }
       if (!session) {
         const snapshot = await this.api.read(path)
-        if (generation !== this.generation) return
+        if (generation !== this.generation || (this.locked && history !== 'none')) return false
         const state = this.state(snapshot.content)
         session = {
           state,
@@ -141,19 +341,35 @@ export class EditorController {
         }
         this.sessions.set(path, session)
       }
-      if (generation !== this.generation) return
+      if (generation !== this.generation || (this.locked && history !== 'none')) return false
+      const previous = this.location()
+      if (position !== undefined) {
+        const anchor = Math.max(0, Math.min(session.state.doc.length, Math.trunc(position)))
+        session.state = session.state.update({ selection: { anchor } }).state
+      }
+      const destination = { path, position: session.state.selection.main.head }
+      if (history === 'record') this.navigation.record(previous, destination)
+      else if (history !== 'none') this.navigation.travel(history, previous)
       // Commit the switch only after the target is available. Open failures are
       // independent of the active session's save/conflict status.
       this.present({ path, status: session.status, error: session.error, openError: '' })
       this.view?.setState(session.state)
+      if (position !== undefined) {
+        this.view?.dispatch({
+          effects: EditorView.scrollIntoView(destination.position, { y: 'center' })
+        })
+      }
       this.view?.focus()
-      if (previous) void this.save(previous)
+      this.presentNavigation()
+      if (previous && previous.path !== path) void this.save(previous.path)
       void this.refresh([path])
+      return true
     } catch {
       if (generation === this.generation)
         this.present({
           openError: `Could not open “${path}”. It may have moved, been deleted, or become unreadable.`
         })
+      return false
     }
   }
 
@@ -223,13 +439,13 @@ export class EditorController {
   async flush(): Promise<boolean> {
     for (const [path, session] of this.sessions) {
       if (!(await this.save(path))) {
-        await this.open(path)
+        await this.openDocument(path, 'none')
         return false
       }
       // Edits arriving during a pending write need another pass before closing.
       while (session.status === 'dirty') {
         if (!(await this.save(path))) {
-          await this.open(path)
+          await this.openDocument(path, 'none')
           return false
         }
       }
@@ -253,6 +469,10 @@ export class EditorController {
   }
 
   async refresh(paths: readonly string[] = [...this.sessions.keys()]): Promise<void> {
+    if (this.changingWorkspace) {
+      this.deferredRefresh = true
+      return
+    }
     await Promise.all(
       paths.map(async (path) => {
         const session = this.sessions.get(path)
@@ -376,6 +596,9 @@ export class EditorController {
   }
 
   reset(): void {
+    this.headingSource = null
+    this.navigation.reset()
+    this.presentNavigation()
     this.generation++
     for (const session of this.sessions.values()) clearTimeout(session.timer)
     this.sessions.clear()

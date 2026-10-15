@@ -3,7 +3,7 @@
 A minimal, local-first, keyboard-first Markdown editor. **Telescope for prose.**
 
 Margin provides normal folder workspaces, a CodeMirror writing surface, contextual
-Markdown presentation and lightweight appearance settings.
+Markdown presentation, transient keyboard pickers and lightweight appearance settings.
 Markdown files remain the source of truth; there is no project format or database.
 
 ## Run
@@ -13,15 +13,30 @@ pnpm install
 pnpm dev
 ```
 
-Open Folder selects a directory using the native system picker. Nested `.md` files
-appear in the temporary file list; `.git`, `node_modules`, `.hg`, `.svn` and symbolic
+Development and builds require a C compiler (`cc` on Linux/macOS, `clang` with the
+Windows SDK on Windows; override with `CC`). Vite builds the small native rename
+helper automatically; `pnpm test` builds it before running tests. Packages must be
+built for the host platform and architecture. The helper is bundled under
+`resources/native` and unpacked from ASAR; it has no Node/Electron ABI dependency.
+
+Open Folder selects a directory using the native system picker. Folders (including empty folders) and nested `.md` files
+appear in a collapsible tree in the temporary Files panel; `.git`, `node_modules`, `.hg`, `.svn` and symbolic
 links are excluded. The last workspace is restored on startup if it is accessible.
 
+- **Ctrl/Cmd+P:** Quick Open Markdown files by fuzzy filename or relative path.
+- **Ctrl/Cmd+Shift+P:** Command Palette; type **Go to Heading** for current-document headings.
+- **Alt+Left / Alt+Right:** Back / Forward through navigation locations.
 - **Ctrl/Cmd+Shift+O:** Open Folder.
 - **Ctrl/Cmd+B:** expand/collapse Files; opening a file collapses the panel.
 - **Ctrl/Cmd+,:** Settings.
-- **Escape:** close Files or cancel appearance changes and restore focus.
-- **Tab, Up/Down, Home/End, Enter:** navigate and open files in the temporary list.
+- **Escape:** close the active picker, close Files, or cancel appearance changes and restore focus.
+- **Tab:** enter or leave the file tree.
+- **Up/Down, Home/End:** move between visible folders and files.
+- **Right/Left:** expand/collapse a folder, or move to its first child/parent.
+- **Enter/Space:** toggle a folder or open a Markdown file.
+- **F2 (tree focus):** rename the selected item inline.
+- **Delete (tree focus):** Move to Trash, with confirmation.
+- **Shift+F10 / context-menu key (tree focus):** open the item's action menu.
 - **Ctrl/Cmd+S:** flush pending saves.
 - Standard CodeMirror selection, undo and redo shortcuts work in the editor.
 
@@ -30,6 +45,107 @@ flushes pending edits first. Clean documents reload external changes; conflictin
 local edits stay in memory and pause autosave. Choose the disk version, explicitly
 keep your version, or save your edits to a new file. A conflict or failed save keeps
 the window open.
+
+## Keyboard navigation
+
+Quick Open, Command Palette and Go to Heading share one centered `Picker`: a query
+input, active result, Up/Down movement, Enter activation and Escape cancellation.
+The input keeps focus and exposes its selected listbox option through
+`aria-activedescendant`. Mouse movement and keyboard movement share selection.
+Native modal dialogs contain focus; cancellation restores the previously focused
+control. Activation closes the picker before opening a file, another picker or Settings.
+Only the first 100 matches are rendered. Matching is memoized by query and the caller's
+stable matching callback; arrow movement and hover only update selection. The three
+picker callers stabilize callbacks against their actual file, command or heading data.
+All styles consume the existing theme tokens.
+
+Quick Open searches the workspace's existing Markdown paths entirely in memory.
+Replaceable matching functions score case-insensitive subsequences, favoring word
+and camel-case boundaries, contiguous runs and filename matches over path-only
+matches. Ties are deterministic. An empty query orders known recent files first,
+then uses stable relative-path ordering. No filesystem scan or IPC occurs per query.
+Deleted files disappear through the existing watcher. A failed open preserves the
+active document and reports the unavailable target.
+
+`commands.ts` contains explicit stable IDs, titles and shortcuts. The application
+binds their enabled predicates and handlers in one registry. Controls, shortcuts and
+palette entries use that registry's execution boundary; unavailable commands are
+hidden from the palette. Application shortcuts run before CodeMirror keymaps,
+including Alt+Arrow navigation. Settings remains the existing appearance dialog.
+
+`EditorController` owns a small in-memory `NavigationSession`. Successful file opens
+from either the sidebar or Quick Open and explicit heading jumps record departure
+locations as `{ path, position }`. Cursor movement and typing do not record history.
+Back/Forward restore document, primary cursor, editor focus and scroll around the
+location. Duplicate consecutive locations are suppressed, and new navigation after
+Back clears Forward. History is bounded to 100 entries per direction; recents are
+unique, most-recent-first and bounded to 50 files. Both reset on a workspace switch
+or app restart. Failed and superseded opens do not advance history or recents.
+Unavailable history targets report an error and preserve the current location and
+stacks. Stored offsets are clamped after document changes; they are not semantic
+anchors that track text edits.
+
+Go to Heading reads the active CodeMirror document, including unsaved edits. It
+uses the existing Markdown syntax tree for ATX and Setext heading levels, excludes
+code fences and indented code, and strips common inline markers from result titles.
+Parsing finishes in short budgets with yields, and cancelled or stale requests are
+rejected. Only heading metadata enters React state. Selecting a heading moves the
+cursor to its source start, scrolls it into view and records a return location. If
+the source changed while the picker was open, reopen it to get current targets.
+The command is available from Command Palette without assigning another shortcut.
+
+## Workspace file operations
+
+The Files panel has quiet New File/New Folder buttons and a small context menu.
+The same stable commands (`workspace.new-file`, `workspace.new-folder`,
+`workspace.rename`, `workspace.trash`) are available in Command Palette when enabled.
+New File/New Folder have no global shortcuts. F2 and Delete are handled only by
+focused tree rows, leaving normal editor and input behavior intact.
+
+The selected filesystem item is separate from the active document. Creation targets
+the selected folder, the selected file's parent, or the workspace root when the
+background is selected. Click empty tree space to select the root. New names and
+renames use an inline input: Enter confirms, Escape cancels, and validation errors
+keep editing active. File rename initially selects the stem. `notes` becomes
+`notes.md`; other file extensions are rejected. A folder's full name is editable,
+including names that end in `.md`. New files start empty and open in CodeMirror.
+New folders and renamed items are selected and revealed in the tree.
+
+Typed, asynchronous preload methods `workspace.createFile`, `createFolder`,
+`rename`, and `trash` carry a workspace root plus relative paths/names. Main validates
+request shapes; `WorkspaceFiles` validates the root's identity, every parent segment,
+actual filesystem type and names. Absolute/traversing paths, ignored directories,
+symlinks and reserved names are rejected. Exclusive file creation and `mkdir` reject
+collisions without overwriting existing paths. Rename uses an atomic OS no-replace
+operation for both files and folders, after collision and source-identity checks.
+Linux uses `renameat2(RENAME_NOREPLACE)`, macOS uses `renamex_np(RENAME_EXCL)`, and
+Windows uses `MoveFileExW` without replacement flags. A destination created after
+preflight is rejected without replacing it, even when it is an empty directory.
+Unsupported filesystems fail safely; there is no ordinary-rename or copy/delete
+fallback. Operations and watcher updates are serialized; monotonic snapshot versions
+reject stale renderer snapshots. Delayed
+watcher events inspect the current path rather than trusting an old event's meaning.
+Successful replies and operation notifications update the UI immediately.
+
+Before rename or Trash, `EditorController` locks editing and flushes affected cached
+documents. Conflict, missing and failed-save states block the operation. A rename
+cannot replace a different cached destination session, even if it disappeared from
+the filesystem. Prefix remapping preserves active/cached sessions, primary cursor,
+undo history, autosave timers, Back/Forward locations, recents and heading targets.
+Folder rename remaps all known descendants. Markdown links are left untouched.
+Watcher refreshes wait until session keys have been remapped or removed.
+
+Move to Trash always uses a native confirmation, defaulting to Cancel. Folder
+confirmation explicitly warns that the folder may contain files Margin does not
+display. Main revalidates the item after confirmation and uses Electron's
+`shell.trashItem`; there is no permanent-delete fallback. Trashed documents are
+removed from cached sessions and navigation only after success. Failures preserve
+the original editor state and show a useful error.
+
+Parent traversal still uses Node's path APIs rather than descriptor-relative
+operations. Identity and symlink checks cannot exclude an external program replacing
+a source or parent between validation and the OS call. Atomic no-replace protects
+the destination from overwrite; stronger source/parent protection remains separate.
 
 ## Appearance and Markdown presentation
 
@@ -53,7 +169,8 @@ Conflict and error feedback remains in the writing pane.
 UI styles share a small token set in `assets/base.css`: a 13 px interface font,
 12 px navigation and helper text, 32 px controls, 28 px icon buttons, the existing
 spacing scale, and 4 px control / 8 px dialog corners. File navigation uses padded
-rows. Empty messages and recovery actions have explicit spacing.
+rows with folder disclosure icons and indentation. Expansion is kept for the current
+workspace session; folder changes outside Margin update the tree. Empty messages and recovery actions have explicit spacing.
 Hover is a quieter tint than selection; selected items keep their fill while hovered,
 disabled controls do not gain hover feedback, and keyboard focus uses the accent ring.
 
@@ -130,9 +247,16 @@ local validation.
 real Electron application against temporary files, substitutes deterministic native
 dialog results, and checks editing, saving, conflicts, keyboard navigation, window
 closing, contextual syntax, Markdown clipboard behavior, appearance previews, focus
-restoration and workspace/settings restoration across separate processes. It leaves
-its temporary artifacts and screenshots in the printed path for inspection.
+restoration, Quick Open, palette execution, heading jumps, Back/Forward cursor
+restoration, deleted picker targets and workspace/settings restoration across
+separate processes. It also bundles a test-only instrumented caller of the real
+Picker to check recomputation, and runs inline creation, rename/undo/history,
+context-menu, conflict-blocking and external watcher workflows. The Trash boundary
+is replaced only in the temporary workspace and its confirmation payloads are
+checked, including the unseen-folder warning. No personal files are moved to Trash.
+It leaves its temporary artifacts and screenshots in the printed path for inspection.
 
 See [the Sessions 0–2 implementation report](docs/sessions-0-2-report.md) for decisions,
-validation, commit progression and remaining limits. Search, palettes,
-backlinks, graphs, plugins, sync and AI are deferred to later sessions.
+validation, commit progression and remaining limits. Workspace content search,
+ripgrep, semantic indexing, backlinks, graphs, tabs, split panes, persistent navigation,
+configurable shortcuts, plugins, sync and AI remain deferred.

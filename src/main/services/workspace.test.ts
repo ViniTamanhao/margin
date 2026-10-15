@@ -22,12 +22,18 @@ test('discovers nested Markdown, ignores dependencies and symlinks, reads origin
     await mkdir(join(root, directory))
     await writeFile(join(root, directory, 'a.md'), '# Hello')
   }
+  await mkdir(join(root, 'empty'))
+  await mkdir(join(root, 'assets'))
+  await writeFile(join(root, 'assets/image.png'), 'image')
+  await mkdir(join(root, 'folder.md'))
   await writeFile(join(root, 'UPPER.MD'), 'Uppercase')
   await writeFile(join(root, 'plain.txt'), 'Ignore')
   await symlink(join(root, 'notes'), join(root, 'link'))
   const service = new WorkspaceService()
   services.push(service)
-  expect((await service.open(root)).files).toEqual(['UPPER.MD', 'notes/a.md'])
+  const workspace = await service.open(root)
+  expect(workspace.files).toEqual(['UPPER.MD', 'notes/a.md'])
+  expect(workspace.directories).toEqual(['assets', 'empty', 'folder.md', 'notes'])
   expect(
     (await new DocumentService(service, join(root, '.recovery')).read('notes/a.md')).content
   ).toBe('# Hello')
@@ -76,4 +82,41 @@ test('watches creates, edits, renames, deletes and stops the previous watcher', 
   await writeFile(join(root, 'ignored.md'), 'old workspace')
   await writeFile(join(other, 'current.md'), 'new workspace')
   await expect.poll(() => service.current()?.files).toEqual(['current.md'])
+})
+
+test('watches empty folders, nested folder renames and removal', async () => {
+  const root = await fixture()
+  await mkdir(join(root, 'initial/empty'), { recursive: true })
+  const service = new WorkspaceService()
+  services.push(service)
+  const events: import('../../shared/api').WorkspaceChange[] = []
+  service.onChanged((change) => events.push(change))
+  await service.open(root)
+  await expect.poll(() => events.length).toBeGreaterThan(0)
+  expect(service.current()?.directories).toEqual(['initial', 'initial/empty'])
+  await mkdir(join(root, 'new.md/nested'), { recursive: true })
+  await writeFile(join(root, 'new.md/nested/a.md'), 'Hello')
+  await expect
+    .poll(() => service.current()?.directories)
+    .toEqual(['initial', 'initial/empty', 'new.md', 'new.md/nested'])
+  await expect.poll(() => service.current()?.files).toEqual(['new.md/nested/a.md'])
+  const { rename } = await import('node:fs/promises')
+  await rename(join(root, 'new.md'), join(root, 'renamed'))
+  await expect
+    .poll(() => service.current()?.directories)
+    .toEqual(['initial', 'initial/empty', 'renamed', 'renamed/nested'])
+  await expect.poll(() => service.current()?.files).toEqual(['renamed/nested/a.md'])
+  await rm(join(root, 'renamed'), { recursive: true })
+  await expect.poll(() => service.current()?.directories).toEqual(['initial', 'initial/empty'])
+  await expect.poll(() => service.current()?.files).toEqual([])
+  await expect
+    .poll(() =>
+      events.some(
+        (change) =>
+          change.changedPaths.includes('renamed/nested/a.md') && change.workspace.files.length === 0
+      )
+    )
+    .toBe(true)
+  await rm(root, { recursive: true })
+  await expect.poll(() => service.current()?.directories).toEqual([])
 })

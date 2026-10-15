@@ -1,45 +1,48 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { Workspace } from '../../shared/api'
+import type { WorkspaceEntry } from '../../shared/api'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { EditorController } from './editor/controller'
 import { EditorSurface } from './editor/EditorSurface'
 import type { AppearanceSettings } from '../../shared/appearance'
 import { applyAppearance } from './appearance'
 import { SettingsDialog } from './components/SettingsDialog'
-import { commandTooltip, shellCommandForKey, type ShellCommandId } from './commands'
+import {
+  createCommandRegistry,
+  commandDefinitions,
+  commandTooltip,
+  commandForKey,
+  type CommandId
+} from './commands'
 import { Icon } from './components/Icon'
+import { FileTree } from './components/FileTree'
+import { QuickOpen } from './components/QuickOpen'
+import { CommandPalette } from './components/CommandPalette'
+import { HeadingPicker } from './components/HeadingPicker'
+import { useWorkspaceFiles } from './useWorkspaceFiles'
 
 function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): React.JSX.Element {
   const [appearance, setAppearance] = useState(initialAppearance)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [workspace, setWorkspace] = useState<Workspace | null>(null)
+  const [picker, setPicker] = useState<'files' | 'commands' | 'headings' | null>(null)
   const [controller] = useState(() => new EditorController(window.margin.document))
   const editor = useSyncExternalStore(controller.subscribe, controller.snapshot)
   const [filesExpanded, setFilesExpanded] = useState(false)
   const filesToggle = useRef<HTMLButtonElement>(null)
   const filesPanel = useRef<HTMLElement>(null)
-  const [busy, setBusy] = useState(false)
+  const {
+    workspace,
+    busy,
+    openFolder,
+    error: workspaceError,
+    selection: treeSelection,
+    setSelection: setTreeSelection,
+    editing: treeEditing,
+    setEditing: setTreeEditing,
+    treeRef,
+    beginEdit,
+    commitEdit,
+    trash
+  } = useWorkspaceFiles(controller)
   const [error, setError] = useState('')
-  useEffect(() => {
-    let alive = true
-    const unsubscribe = window.margin.workspace.onChanged((change) => {
-      if (alive) {
-        setWorkspace(change.workspace)
-        void controller.refresh(change.changedPaths)
-      }
-    })
-    void window.margin.workspace
-      .current()
-      .then((workspace) => {
-        if (alive) setWorkspace(workspace)
-      })
-      .catch(() => {
-        if (alive) setError('Could not restore the workspace. Open a folder to continue.')
-      })
-    return () => {
-      alive = false
-      unsubscribe()
-    }
-  }, [controller])
   useEffect(
     () =>
       window.margin.window.onClosing(() => {
@@ -57,72 +60,180 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       }),
     [controller]
   )
-  const openFolder = useCallback(async (): Promise<void> => {
-    controller.setLocked(true)
-    setBusy(true)
-    setError('')
-    try {
-      if (!(await controller.flush())) return
-      const next = await window.margin.workspace.open()
-      if (next) {
-        setWorkspace(next)
-        controller.reset()
-      }
-    } catch {
-      setError('Could not open this folder. Check that it is accessible.')
-    } finally {
-      setBusy(false)
-      controller.setLocked(false)
+  const openFile = (path: string): void => {
+    void controller.open(path).then((opened) => {
+      if (opened) setFilesExpanded(false)
+    })
+  }
+  const toggleFiles = useCallback((): void => {
+    setFilesExpanded(!filesExpanded)
+    if (filesExpanded) {
+      if (editor.path) controller.focus()
+      else filesToggle.current?.focus()
     }
-  }, [controller])
-  const executeCommand = useCallback(
-    (id: ShellCommandId): void => {
-      if (id === 'workspace.open') {
-        if (!busy && !editor.locked) void openFolder()
-      }
-      if (id === 'workspace.toggle-files' && workspace) {
-        setFilesExpanded(!filesExpanded)
-        if (filesExpanded) {
-          if (editor.path) controller.focus()
-          else filesToggle.current?.focus()
+  }, [filesExpanded, editor.path, controller])
+  const commands = useMemo(
+    () =>
+      // The registry stores handlers; it never invokes them during render.
+      // eslint-disable-next-line react-hooks/refs
+      createCommandRegistry([
+        {
+          id: 'workspace.new-file',
+          ...commandDefinitions['workspace.new-file'],
+          isEnabled: () => Boolean(workspace) && !busy && !editor.locked && !treeEditing,
+          execute: (target) => {
+            setFilesExpanded(true)
+            beginEdit('new-file', target)
+          }
+        },
+        {
+          id: 'workspace.new-folder',
+          ...commandDefinitions['workspace.new-folder'],
+          isEnabled: () => Boolean(workspace) && !busy && !editor.locked && !treeEditing,
+          execute: (target) => {
+            setFilesExpanded(true)
+            beginEdit('new-folder', target)
+          }
+        },
+        {
+          id: 'workspace.rename',
+          ...commandDefinitions['workspace.rename'],
+          isEnabled: (target) =>
+            Boolean(target === undefined ? treeSelection : target) &&
+            !busy &&
+            !editor.locked &&
+            !treeEditing,
+          execute: (target) => {
+            setFilesExpanded(true)
+            beginEdit('rename', target)
+          }
+        },
+        {
+          id: 'workspace.trash',
+          ...commandDefinitions['workspace.trash'],
+          isEnabled: (target) =>
+            Boolean(target === undefined ? treeSelection : target) &&
+            !busy &&
+            !editor.locked &&
+            !treeEditing,
+          execute: trash
+        },
+        {
+          id: 'editor.go-to-heading',
+          ...commandDefinitions['editor.go-to-heading'],
+          isEnabled: () =>
+            Boolean(editor.path) && editor.status !== 'missing' && !busy && !editor.locked,
+          execute: () => setPicker('headings')
+        },
+        {
+          id: 'navigation.back',
+          ...commandDefinitions['navigation.back'],
+          isEnabled: () => editor.canGoBack && !busy && !editor.locked,
+          execute: () => controller.navigate('back')
+        },
+        {
+          id: 'navigation.forward',
+          ...commandDefinitions['navigation.forward'],
+          isEnabled: () => editor.canGoForward && !busy && !editor.locked,
+          execute: () => controller.navigate('forward')
+        },
+        {
+          id: 'commands.open',
+          ...commandDefinitions['commands.open'],
+          isEnabled: () => !busy && !editor.locked,
+          execute: () => setPicker('commands')
+        },
+        {
+          id: 'workspace.quick-open',
+          ...commandDefinitions['workspace.quick-open'],
+          isEnabled: () => Boolean(workspace) && !busy && !editor.locked,
+          execute: () => setPicker('files')
+        },
+        {
+          id: 'workspace.open',
+          ...commandDefinitions['workspace.open'],
+          isEnabled: () => !busy && !editor.locked,
+          execute: openFolder
+        },
+        {
+          id: 'workspace.toggle-files',
+          ...commandDefinitions['workspace.toggle-files'],
+          isEnabled: () => Boolean(workspace) && !busy && !editor.locked,
+          execute: toggleFiles
+        },
+        {
+          id: 'settings.open',
+          ...commandDefinitions['settings.open'],
+          isEnabled: () => !busy && !editor.locked,
+          execute: () => {
+            setFilesExpanded(false)
+            setSettingsOpen(true)
+          }
         }
-      }
-      if (id === 'settings.open') {
-        setFilesExpanded(false)
-        setSettingsOpen(true)
-      }
+      ]),
+    [
+      busy,
+      treeEditing,
+      treeSelection,
+      beginEdit,
+      trash,
+      editor.locked,
+      editor.path,
+      editor.status,
+      editor.canGoBack,
+      editor.canGoForward,
+      controller,
+      workspace,
+      openFolder,
+      toggleFiles
+    ]
+  )
+  const availableCommands = useMemo(() => commands.available(), [commands])
+  const executeCommand = useCallback(
+    (id: CommandId, target?: WorkspaceEntry | null): void => {
+      void commands.execute(id, target).catch(() => {
+        setError(`Could not execute “${commandDefinitions[id].title}”. Try again.`)
+      })
     },
-    [busy, editor.locked, editor.path, controller, filesExpanded, openFolder, workspace]
+    [commands]
   )
   useEffect(() => {
     if (filesExpanded)
-      filesPanel.current?.querySelector<HTMLButtonElement>('[aria-current], button')?.focus()
+      filesPanel.current
+        ?.querySelector<HTMLElement>('.tree-inline-edit input, [tabindex="0"]')
+        ?.focus()
   }, [filesExpanded])
   useEffect(() => {
     const keydown = (event: KeyboardEvent): void => {
-      if (settingsOpen || event.defaultPrevented) return
+      if (settingsOpen || picker || event.defaultPrevented) return
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest('.tree-inline-edit, .tree-context-menu')
+      )
+        return
       if (event.key === 'Escape' && filesExpanded) {
         event.preventDefault()
         setFilesExpanded(false)
         filesToggle.current?.focus()
         return
       }
-      const command = shellCommandForKey(event)
+      const command = commandForKey(event)
       if (command) {
         event.preventDefault()
+        event.stopPropagation()
         executeCommand(command)
       }
     }
     const focus = (): void => {
       void controller.refresh()
     }
-    window.addEventListener('keydown', keydown)
+    window.addEventListener('keydown', keydown, true)
     window.addEventListener('focus', focus)
     return () => {
-      window.removeEventListener('keydown', keydown)
+      window.removeEventListener('keydown', keydown, true)
       window.removeEventListener('focus', focus)
     }
-  }, [controller, executeCommand, filesExpanded, settingsOpen])
+  }, [controller, executeCommand, filesExpanded, settingsOpen, picker])
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -152,6 +263,11 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           {error}
         </p>
       )}
+      {workspaceError && (
+        <p className="notice" role="alert">
+          {workspaceError}
+        </p>
+      )}
       {workspace?.warnings.map((warning) => (
         <p className="notice" key={warning}>
           {warning}
@@ -163,7 +279,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
             ref={filesToggle}
             className="icon-button"
             aria-label="Toggle files"
-            disabled={!workspace}
+            disabled={!commands.get('workspace.toggle-files')?.isEnabled()}
             title={commandTooltip('workspace.toggle-files')}
             aria-expanded={filesExpanded}
             aria-controls={workspace ? 'workspace-files' : undefined}
@@ -175,6 +291,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
             className="icon-button settings-toggle"
             aria-label="Settings"
             title={commandTooltip('settings.open')}
+            disabled={!commands.get('settings.open')?.isEnabled()}
             onClick={() => executeCommand('settings.open')}
           >
             <Icon name="settings" />
@@ -187,51 +304,22 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
               id="workspace-files"
               className={`file-list ${filesExpanded ? 'expanded' : ''}`}
               inert={!filesExpanded}
-              aria-label="Markdown files"
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') {
-                  event.preventDefault()
-                  setFilesExpanded(false)
-                  filesToggle.current?.focus()
-                  return
-                }
-                const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End']
-                if (!keys.includes(event.key)) return
-                const buttons = [...event.currentTarget.querySelectorAll('button')]
-                const current = buttons.indexOf(document.activeElement as HTMLButtonElement)
-                const next =
-                  event.key === 'Home'
-                    ? 0
-                    : event.key === 'End'
-                      ? buttons.length - 1
-                      : Math.max(
-                          0,
-                          Math.min(
-                            buttons.length - 1,
-                            current + (event.key === 'ArrowDown' ? 1 : -1)
-                          )
-                        )
-                event.preventDefault()
-                buttons[next]?.focus()
-              }}
+              aria-label="Workspace files"
+              tabIndex={-1}
             >
-              {workspace.files.length === 0 && (
-                <p className="file-list-empty">No Markdown files.</p>
-              )}
-              {workspace.files.map((path) => (
-                <button
-                  key={path}
-                  disabled={busy || editor.locked}
-                  aria-current={editor.path === path ? 'page' : undefined}
-                  onClick={() => {
-                    void controller.open(path).then(() => {
-                      if (controller.snapshot().path === path) setFilesExpanded(false)
-                    })
-                  }}
-                >
-                  {path}
-                </button>
-              ))}
+              <FileTree
+                ref={treeRef}
+                key={workspace.root}
+                workspace={workspace}
+                activePath={editor.path}
+                selection={treeSelection}
+                onSelect={setTreeSelection}
+                onCommand={executeCommand}
+                onCommit={commitEdit}
+                onEditingChange={setTreeEditing}
+                disabled={busy || editor.locked}
+                onOpen={openFile}
+              />
             </nav>
           )}
         </div>
@@ -295,6 +383,24 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           )}
         </section>
       </div>
+      {picker === 'files' && workspace && (
+        <QuickOpen
+          recents={editor.recents}
+          files={workspace.files}
+          onOpen={openFile}
+          onClose={() => setPicker(null)}
+        />
+      )}
+      {picker === 'commands' && (
+        <CommandPalette
+          commands={availableCommands}
+          onExecute={executeCommand}
+          onClose={() => setPicker(null)}
+        />
+      )}
+      {picker === 'headings' && (
+        <HeadingPicker controller={controller} onClose={() => setPicker(null)} />
+      )}
       {settingsOpen && (
         <SettingsDialog
           settings={appearance}

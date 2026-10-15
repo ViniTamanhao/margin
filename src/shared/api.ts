@@ -6,6 +6,10 @@ export const channels = {
   appearanceSave: 'appearance:save',
   workspaceOpen: 'workspace:open',
   workspaceCurrent: 'workspace:current',
+  workspaceCreateFile: 'workspace:create-file',
+  workspaceCreateFolder: 'workspace:create-folder',
+  workspaceRename: 'workspace:rename',
+  workspaceTrash: 'workspace:trash',
   documentRead: 'document:read',
   documentSave: 'document:save',
   documentSaveCopy: 'document:save-copy',
@@ -20,13 +24,43 @@ export interface AppInfo {
 }
 export interface Workspace {
   root: string
+  version: number
   name: string
   files: string[]
+  directories: string[]
   warnings: string[]
 }
 export interface WorkspaceChange {
   workspace: Workspace
   changedPaths: string[]
+  operation?: { kind: 'rename'; from: string; to: string } | { kind: 'trash'; path: string }
+}
+export interface WorkspaceEntry {
+  path: string
+  kind: 'file' | 'directory'
+}
+export interface WorkspaceCreateRequest {
+  root: string
+  parentPath: string
+  name: string
+}
+export interface WorkspaceItemRequest {
+  root: string
+  path: string
+}
+export interface WorkspaceRenameRequest {
+  root: string
+  path: string
+  name: string
+}
+export interface WorkspaceError {
+  code: 'invalid-path' | 'invalid-name' | 'collision' | 'unavailable' | 'changed' | 'filesystem'
+  message: string
+}
+export type WorkspaceResult<T> = { ok: true; value: T } | { ok: false; error: WorkspaceError }
+export interface WorkspaceMutation {
+  change: WorkspaceChange
+  entry: WorkspaceEntry
 }
 export interface DocumentSnapshot {
   path: string
@@ -55,6 +89,10 @@ export interface MarginAPI {
   workspace: {
     open(): Promise<Workspace | null>
     current(): Promise<Workspace | null>
+    createFile(request: WorkspaceCreateRequest): Promise<WorkspaceResult<WorkspaceMutation>>
+    createFolder(request: WorkspaceCreateRequest): Promise<WorkspaceResult<WorkspaceMutation>>
+    rename(request: WorkspaceRenameRequest): Promise<WorkspaceResult<WorkspaceMutation>>
+    trash(request: WorkspaceItemRequest): Promise<WorkspaceResult<WorkspaceMutation | null>>
     onChanged(callback: (change: WorkspaceChange) => void): () => void
   }
   document: {
