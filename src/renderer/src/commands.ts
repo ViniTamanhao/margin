@@ -1,6 +1,27 @@
 import { fuzzyScore, comparePaths } from './navigation/matching'
 
+interface CommandDefinition {
+  title: string
+  shortcut?: string
+  key?: string
+  shift?: boolean
+  alt?: boolean
+}
 export const commandDefinitions = {
+  'navigation.back': {
+    title: 'Go Back',
+    shortcut: 'Alt+Left',
+    key: 'arrowleft',
+    alt: true,
+    shift: false
+  },
+  'navigation.forward': {
+    title: 'Go Forward',
+    shortcut: 'Alt+Right',
+    key: 'arrowright',
+    alt: true,
+    shift: false
+  },
   'commands.open': {
     title: 'Command Palette',
     shortcut: 'Ctrl/Cmd+Shift+P',
@@ -11,7 +32,7 @@ export const commandDefinitions = {
   'workspace.open': { title: 'Open Folder', shortcut: 'Ctrl/Cmd+Shift+O', key: 'o', shift: true },
   'workspace.toggle-files': { title: 'Files', shortcut: 'Ctrl/Cmd+B', key: 'b', shift: false },
   'settings.open': { title: 'Settings', shortcut: 'Ctrl/Cmd+,', key: ',', shift: false }
-} as const
+} as const satisfies Record<string, CommandDefinition>
 export type CommandId = keyof typeof commandDefinitions
 
 export interface Command {
@@ -41,14 +62,22 @@ export function createCommandRegistry(commands: readonly Command[]): {
 }
 
 export function commandForKey(event: KeyboardEvent): CommandId | undefined {
-  if (!(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return undefined
+  if (event.isComposing) return undefined
   return (Object.keys(commandDefinitions) as CommandId[]).find((id) => {
-    const command = commandDefinitions[id]
-    return event.key.toLowerCase() === command.key && event.shiftKey === command.shift
+    const command: CommandDefinition = commandDefinitions[id]
+    const modifiers = command.alt
+      ? event.altKey && !event.metaKey && !event.ctrlKey
+      : (event.metaKey || event.ctrlKey) && !event.altKey
+    return (
+      modifiers &&
+      command.key === event.key.toLowerCase() &&
+      event.shiftKey === Boolean(command.shift)
+    )
   })
 }
 export function commandTooltip(id: CommandId): string {
-  return `${commandDefinitions[id].title} (${commandDefinitions[id].shortcut})`
+  const command: CommandDefinition = commandDefinitions[id]
+  return command.shortcut ? `${command.title} (${command.shortcut})` : command.title
 }
 
 export function matchCommands(query: string, commands: readonly Command[]): Command[] {

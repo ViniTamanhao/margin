@@ -17,6 +17,7 @@ vi.mock('@codemirror/view', async (importOriginal) => {
   return {
     ...actual,
     EditorView: class {
+      static scrollIntoView = actual.EditorView.scrollIntoView
       static editable = actual.EditorView.editable
       static lineWrapping = actual.EditorView.lineWrapping
       static contentAttributes = actual.EditorView.contentAttributes
@@ -154,8 +155,13 @@ test('successful open clears open failure and restores cached selection and hist
   const state = view.state
   api.read.mockRejectedValueOnce(new Error('ENOENT'))
   await controller.open('b.md')
+  let savedA = original
+  api.save.mockImplementation(async (request) => {
+    savedA = { path: request.path, content: request.content, revision: 'local' }
+    return { kind: 'saved', revision: 'local' }
+  })
   api.read.mockImplementation(async (path) =>
-    path === 'b.md' ? { path, content: '# Second', revision: 'B' } : original
+    path === 'b.md' ? { path, content: '# Second', revision: 'B' } : savedA
   )
   await controller.open('b.md')
   expect(controller.snapshot()).toMatchObject({ path: 'b.md', status: 'saved', openError: '' })
@@ -221,4 +227,69 @@ test('conflict stays paused while disk differs from the known base revision', as
   await vi.advanceTimersByTimeAsync(1300)
   expect(api.save).not.toHaveBeenCalled()
   expect(view.state).toBe(state)
+})
+
+test('navigation records explicit opens and restores cursor locations across files', async () => {
+  const view = views[0]
+  api.read.mockImplementation(async (path) =>
+    path === 'a.md' ? original : { path, content: '# Second document', revision: 'B' }
+  )
+  view.dispatch({ selection: { anchor: 6 } })
+  expect(controller.snapshot().canGoBack).toBe(false)
+  await controller.open('b.md')
+  view.dispatch({ selection: { anchor: 10 } })
+  await controller.navigate('back')
+  expect(controller.location()).toEqual({ path: 'a.md', position: 6 })
+  await controller.navigate('forward')
+  expect(controller.location()).toEqual({ path: 'b.md', position: 10 })
+  expect(controller.snapshot().recents).toEqual(['b.md', 'a.md'])
+  await controller.open('b.md')
+  await controller.navigate('back')
+  expect(controller.location()?.path).toBe('a.md')
+  await controller.open('c.md')
+  expect(controller.snapshot().canGoForward).toBe(false)
+})
+
+test('failed or superseded opens do not record navigation or recents', async () => {
+  api.read.mockRejectedValueOnce(new Error('ENOENT'))
+  expect(await controller.open('missing.md')).toBe(false)
+  expect(controller.snapshot().canGoBack).toBe(false)
+  expect(controller.snapshot().recents).toEqual(['a.md'])
+  const read = deferred<DocumentSnapshot>()
+  api.read.mockImplementation(async (path) =>
+    path === 'slow.md' ? read.promise : { ...original, path }
+  )
+  const slow = controller.open('slow.md')
+  await controller.open('c.md')
+  read.resolve({ ...original, path: 'slow.md' })
+  expect(await slow).toBe(false)
+  expect(controller.snapshot().recents).toEqual(['c.md', 'a.md'])
+  await controller.navigate('back')
+  expect(controller.location()?.path).toBe('a.md')
+  expect(controller.snapshot().canGoBack).toBe(false)
+})
+
+test('history clamps positions after external edits and preserves stacks on missing targets', async () => {
+  api.read.mockImplementation(async (path) => ({ ...original, path }))
+  views[0].dispatch({ selection: { anchor: 9 } })
+  await controller.open('b.md')
+  api.read.mockImplementation(async (path) =>
+    path === 'a.md' ? { path, content: 'Hi', revision: 'short' } : { ...original, path }
+  )
+  await controller.navigate('back')
+  expect(controller.location()).toEqual({ path: 'a.md', position: 2 })
+  api.read.mockImplementation(async (path) => {
+    if (path === 'b.md') throw new Error('ENOENT')
+    return { path, content: 'Hi', revision: 'short' }
+  })
+  await controller.navigate('forward')
+  expect(controller.location()?.path).toBe('a.md')
+  expect(controller.snapshot().canGoForward).toBe(true)
+  expect(controller.snapshot().openError).toContain('b.md')
+  controller.reset()
+  expect(controller.snapshot()).toMatchObject({
+    canGoBack: false,
+    canGoForward: false,
+    recents: []
+  })
 })

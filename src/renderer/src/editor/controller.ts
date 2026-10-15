@@ -3,6 +3,11 @@ import { EditorView, keymap, drawSelection } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { contextualMarkdown } from './markdown-presentation'
+import {
+  NavigationSession,
+  type NavigationLocation,
+  type NavigationDirection
+} from '../navigation/session'
 import type { MarginAPI, DocumentSnapshot } from '../../../shared/api'
 
 type DocumentStatus = 'saved' | 'dirty' | 'saving' | 'conflict' | 'missing' | 'error'
@@ -21,10 +26,14 @@ export interface EditorPresentation {
   status: DocumentStatus | 'idle'
   error: string
   openError: string
+  canGoBack: boolean
+  canGoForward: boolean
+  recents: readonly string[]
 }
 
 // CodeMirror owns documents, selections and history; React only subscribes to presentation.
 export class EditorController {
+  private navigation = new NavigationSession()
   private sessions = new Map<string, EditorSession>()
   private view: EditorView | null = null
   private generation = 0
@@ -36,7 +45,10 @@ export class EditorController {
     status: 'idle',
     error: '',
     openError: '',
-    locked: false
+    locked: false,
+    canGoBack: false,
+    canGoForward: false,
+    recents: []
   }
 
   constructor(private readonly api: MarginAPI['document']) {}
@@ -56,7 +68,10 @@ export class EditorController {
       next.path === this.presentation.path &&
       next.status === this.presentation.status &&
       next.error === this.presentation.error &&
-      next.openError === this.presentation.openError
+      next.openError === this.presentation.openError &&
+      next.canGoBack === this.presentation.canGoBack &&
+      next.canGoForward === this.presentation.canGoForward &&
+      next.recents === this.presentation.recents
     )
       return
     this.presentation = next
@@ -123,14 +138,45 @@ export class EditorController {
     this.view?.focus()
   }
 
-  async open(path: string): Promise<void> {
+  location(): NavigationLocation | null {
+    const path = this.presentation.path
+    const session = path ? this.sessions.get(path) : undefined
+    return path && session ? { path, position: session.state.selection.main.head } : null
+  }
+
+  private presentNavigation(): void {
+    this.present({
+      canGoBack: Boolean(this.navigation.target('back')),
+      canGoForward: Boolean(this.navigation.target('forward')),
+      recents: this.navigation.recents
+    })
+  }
+
+  open(path: string): Promise<boolean> {
+    return this.openDocument(path, 'record')
+  }
+
+  async navigate(direction: NavigationDirection): Promise<void> {
+    const target = this.navigation.target(direction)
+    if (target) await this.openDocument(target.path, direction, target.position)
+  }
+
+  private async openDocument(
+    path: string,
+    history: 'record' | 'none' | NavigationDirection,
+    position?: number
+  ): Promise<boolean> {
+    if (this.locked && history !== 'none') return false
     const generation = ++this.generation
-    const previous = this.presentation.path
     try {
       let session = this.sessions.get(path)
+      if (session && path !== this.presentation.path && history !== 'none') {
+        await this.refresh([path])
+        if (session.status === 'missing') throw new Error('Document unavailable.')
+      }
       if (!session) {
         const snapshot = await this.api.read(path)
-        if (generation !== this.generation) return
+        if (generation !== this.generation || (this.locked && history !== 'none')) return false
         const state = this.state(snapshot.content)
         session = {
           state,
@@ -141,19 +187,35 @@ export class EditorController {
         }
         this.sessions.set(path, session)
       }
-      if (generation !== this.generation) return
+      if (generation !== this.generation || (this.locked && history !== 'none')) return false
+      const previous = this.location()
+      if (position !== undefined) {
+        const anchor = Math.max(0, Math.min(session.state.doc.length, Math.trunc(position)))
+        session.state = session.state.update({ selection: { anchor } }).state
+      }
+      const destination = { path, position: session.state.selection.main.head }
+      if (history === 'record') this.navigation.record(previous, destination)
+      else if (history !== 'none') this.navigation.travel(history, previous)
       // Commit the switch only after the target is available. Open failures are
       // independent of the active session's save/conflict status.
       this.present({ path, status: session.status, error: session.error, openError: '' })
       this.view?.setState(session.state)
+      if (position !== undefined) {
+        this.view?.dispatch({
+          effects: EditorView.scrollIntoView(destination.position, { y: 'center' })
+        })
+      }
       this.view?.focus()
-      if (previous) void this.save(previous)
+      this.presentNavigation()
+      if (previous && previous.path !== path) void this.save(previous.path)
       void this.refresh([path])
+      return true
     } catch {
       if (generation === this.generation)
         this.present({
           openError: `Could not open “${path}”. It may have moved, been deleted, or become unreadable.`
         })
+      return false
     }
   }
 
@@ -223,13 +285,13 @@ export class EditorController {
   async flush(): Promise<boolean> {
     for (const [path, session] of this.sessions) {
       if (!(await this.save(path))) {
-        await this.open(path)
+        await this.openDocument(path, 'none')
         return false
       }
       // Edits arriving during a pending write need another pass before closing.
       while (session.status === 'dirty') {
         if (!(await this.save(path))) {
-          await this.open(path)
+          await this.openDocument(path, 'none')
           return false
         }
       }
@@ -376,6 +438,8 @@ export class EditorController {
   }
 
   reset(): void {
+    this.navigation.reset()
+    this.presentNavigation()
     this.generation++
     for (const session of this.sessions.values()) clearTimeout(session.timer)
     this.sessions.clear()

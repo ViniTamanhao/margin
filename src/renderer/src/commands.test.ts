@@ -53,3 +53,15 @@ test('palette fuzzy-filters enabled command titles with stable ordering', () => 
   expect(commandForKey(key({ key: 'p' }))).toBe('commands.open')
   expect(commandForKey(key({ key: 'p', shiftKey: false }))).toBe('workspace.quick-open')
 })
+
+test('Back and Forward use Alt alone without stealing platform modified arrows', () => {
+  expect(
+    commandForKey(key({ key: 'ArrowLeft', altKey: true, ctrlKey: false, shiftKey: false }))
+  ).toBe('navigation.back')
+  expect(
+    commandForKey(key({ key: 'ArrowRight', altKey: true, ctrlKey: false, shiftKey: false }))
+  ).toBe('navigation.forward')
+  expect(
+    commandForKey(key({ key: 'ArrowLeft', altKey: true, ctrlKey: true, shiftKey: false }))
+  ).toBeUndefined()
+})

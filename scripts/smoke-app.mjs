@@ -366,6 +366,38 @@ async function run() {
       await pickerQuery('a.md')
       await key('Return')
       await until(async () => (await heading()) === 'a.md', 'Quick Open returns to first document')
+      await shortcut('Home')
+      await key('Right')
+      await key('Right')
+      const cursor = () =>
+        evaluate(
+          `({ text: window.getSelection()?.anchorNode?.textContent, offset: window.getSelection()?.anchorOffset })`
+        )
+      const originalCursor = await cursor()
+      await shortcut('p')
+      assert.equal(
+        await evaluate(
+          "document.querySelector('.picker [aria-selected=true]')?.textContent.includes('a.md')"
+        ),
+        true,
+        'empty Quick Open prefers most recent file'
+      )
+      await pickerQuery('b.md')
+      await key('Return')
+      await until(async () => (await heading()) === 'nested/b.md', 'history target opened')
+      await shortcut('End')
+      const secondCursor = await cursor()
+      await shortcut('Left', ['alt'])
+      await until(async () => (await heading()) === 'a.md', 'Alt+Left returns to previous document')
+      assert.deepEqual(await cursor(), originalCursor, 'Back restores cursor location')
+      await shortcut('Right', ['alt'])
+      await until(
+        async () => (await heading()) === 'nested/b.md',
+        'Alt+Right restores next document'
+      )
+      assert.deepEqual(await cursor(), secondCursor, 'Forward restores cursor location')
+      await shortcut('Left', ['alt'])
+      await until(async () => (await heading()) === 'a.md', 'history returns to first document')
       const markdown = '## Heading\n\n**bold** *italic* `code`\n\nTail\n'
       await writeFile(join(root, 'workspace/a.md'), markdown)
       await until(async () => (await text()).includes('Heading'), 'presentation fixture loaded')

@@ -86,8 +86,8 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
     }
   }, [controller])
   const openFile = (path: string): void => {
-    void controller.open(path).then(() => {
-      if (controller.snapshot().path === path) setFilesExpanded(false)
+    void controller.open(path).then((opened) => {
+      if (opened) setFilesExpanded(false)
     })
   }
   const toggleFiles = useCallback((): void => {
@@ -102,6 +102,18 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       // The registry stores handlers; it never invokes them during render.
       // eslint-disable-next-line react-hooks/refs
       createCommandRegistry([
+        {
+          id: 'navigation.back',
+          ...commandDefinitions['navigation.back'],
+          isEnabled: () => editor.canGoBack && !busy && !editor.locked,
+          execute: () => controller.navigate('back')
+        },
+        {
+          id: 'navigation.forward',
+          ...commandDefinitions['navigation.forward'],
+          isEnabled: () => editor.canGoForward && !busy && !editor.locked,
+          execute: () => controller.navigate('forward')
+        },
         {
           id: 'commands.open',
           ...commandDefinitions['commands.open'],
@@ -136,7 +148,16 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           }
         }
       ]),
-    [busy, editor.locked, workspace, openFolder, toggleFiles]
+    [
+      busy,
+      editor.locked,
+      editor.canGoBack,
+      editor.canGoForward,
+      controller,
+      workspace,
+      openFolder,
+      toggleFiles
+    ]
   )
   const executeCommand = useCallback(
     (id: CommandId): void => {
@@ -162,16 +183,17 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       const command = commandForKey(event)
       if (command) {
         event.preventDefault()
+        event.stopPropagation()
         executeCommand(command)
       }
     }
     const focus = (): void => {
       void controller.refresh()
     }
-    window.addEventListener('keydown', keydown)
+    window.addEventListener('keydown', keydown, true)
     window.addEventListener('focus', focus)
     return () => {
-      window.removeEventListener('keydown', keydown)
+      window.removeEventListener('keydown', keydown, true)
       window.removeEventListener('focus', focus)
     }
   }, [controller, executeCommand, filesExpanded, settingsOpen, picker])
@@ -314,7 +336,12 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
         </section>
       </div>
       {picker === 'files' && workspace && (
-        <QuickOpen files={workspace.files} onOpen={openFile} onClose={() => setPicker(null)} />
+        <QuickOpen
+          recents={editor.recents}
+          files={workspace.files}
+          onOpen={openFile}
+          onClose={() => setPicker(null)}
+        />
       )}
       {picker === 'commands' && (
         <CommandPalette
