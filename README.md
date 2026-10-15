@@ -13,6 +13,12 @@ pnpm install
 pnpm dev
 ```
 
+Development and builds require a C compiler (`cc` on Linux/macOS, `clang` with the
+Windows SDK on Windows; override with `CC`). Vite builds the small native rename
+helper automatically; `pnpm test` builds it before running tests. Packages must be
+built for the host platform and architecture. The helper is bundled under
+`resources/native` and unpacked from ASAR; it has no Node/Electron ABI dependency.
+
 Open Folder selects a directory using the native system picker. Folders (including empty folders) and nested `.md` files
 appear in a collapsible tree in the temporary Files panel; `.git`, `node_modules`, `.hg`, `.svn` and symbolic
 links are excluded. The last workspace is restored on startup if it is accessible.
@@ -110,9 +116,14 @@ Typed, asynchronous preload methods `workspace.createFile`, `createFolder`,
 request shapes; `WorkspaceFiles` validates the root's identity, every parent segment,
 actual filesystem type and names. Absolute/traversing paths, ignored directories,
 symlinks and reserved names are rejected. Exclusive file creation and `mkdir` reject
-collisions without overwriting existing paths. Rename uses the filesystem rename
-operation with collision and source-identity checks. Operations and watcher updates
-are serialized; monotonic snapshot versions reject stale renderer snapshots. Delayed
+collisions without overwriting existing paths. Rename uses an atomic OS no-replace
+operation for both files and folders, after collision and source-identity checks.
+Linux uses `renameat2(RENAME_NOREPLACE)`, macOS uses `renamex_np(RENAME_EXCL)`, and
+Windows uses `MoveFileExW` without replacement flags. A destination created after
+preflight is rejected without replacing it, even when it is an empty directory.
+Unsupported filesystems fail safely; there is no ordinary-rename or copy/delete
+fallback. Operations and watcher updates are serialized; monotonic snapshot versions
+reject stale renderer snapshots. Delayed
 watcher events inspect the current path rather than trusting an old event's meaning.
 Successful replies and operation notifications update the UI immediately.
 
@@ -131,11 +142,10 @@ display. Main revalidates the item after confirmation and uses Electron's
 removed from cached sessions and navigation only after success. Failures preserve
 the original editor state and show a useful error.
 
-As with document saves, Node's portable path APIs do not offer atomic no-replace
-rename or descriptor-relative traversal. Collision/identity checks cannot exclude
-an external program replacing a path between the final check and the OS call.
-Atomic no-clobber rename and stronger cross-process protection require a later
-native filesystem boundary; rename is not emulated as copy/create plus delete.
+Parent traversal still uses Node's path APIs rather than descriptor-relative
+operations. Identity and symlink checks cannot exclude an external program replacing
+a source or parent between validation and the OS call. Atomic no-replace protects
+the destination from overwrite; stronger source/parent protection remains separate.
 
 ## Appearance and Markdown presentation
 

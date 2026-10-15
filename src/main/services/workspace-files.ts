@@ -1,9 +1,10 @@
-import { lstat, realpath, open, mkdir, rename } from 'node:fs/promises'
+import { lstat, realpath, open, mkdir } from 'node:fs/promises'
 import { isAbsolute, resolve } from 'node:path'
 import type { Stats } from 'node:fs'
 import type { WorkspaceEntry, WorkspaceError } from '../../shared/api'
 import { parentPath } from '../../shared/workspace-paths'
 import { normalizeEntryName } from '../../shared/workspace-names'
+import { renameNoReplace } from '../rename-no-replace'
 
 export const ignoredDirectories = new Set(['.git', 'node_modules', '.hg', '.svn'])
 export const isMarkdown = (path: string): boolean => path.toLowerCase().endsWith('.md')
@@ -22,6 +23,11 @@ export function workspaceError(error: unknown): WorkspaceError {
   const code = error && typeof error === 'object' && 'code' in error ? error.code : ''
   if (code === 'EEXIST' || code === 'ENOTEMPTY')
     return { code: 'collision', message: 'An item with that name already exists.' }
+  if (code === 'ENOTSUP')
+    return {
+      code: 'filesystem',
+      message: 'This filesystem does not support safe renaming. Rename this item outside Margin.'
+    }
   if (code === 'ENOENT' || code === 'ENOTDIR')
     return {
       code: 'unavailable',
@@ -156,9 +162,9 @@ export class WorkspaceFiles {
       if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'))
         throw error
     }
-    // Node exposes ordinary filesystem rename, not a portable no-replace syscall.
-    // Serialize Margin operations and reject existing destinations immediately before it.
-    await rename(latest.absolute, target.absolute)
+    // The preflight gives an early error, but only the OS no-replace operation
+    // protects a destination created after that check (including empty folders).
+    await renameNoReplace(latest.absolute, target.absolute)
     return { path: target.path, kind: source.entry.kind }
   }
 }
