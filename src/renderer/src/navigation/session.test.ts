@@ -46,3 +46,24 @@ test('recents are unique, reordered on revisit, bounded and cleared with history
   expect(session.recents).toEqual([])
   expect(session.target('back')).toBeUndefined()
 })
+
+test('file and folder rename remap recents and both history directions, Trash removes descendants', () => {
+  const session = new NavigationSession()
+  const nested = { path: 'folder/nested/b.md', position: 9 }
+  const file = { path: 'folder/a.md', position: 3 }
+  session.record(null, file)
+  session.record(file, nested)
+  session.record(nested, { path: 'outside.md', position: 0 })
+  session.travel('back', { path: 'outside.md', position: 4 })
+  session.remap('folder/a.md', 'folder/renamed.md')
+  expect(session.target('back')).toEqual({ path: 'folder/renamed.md', position: 3 })
+  session.remap('folder', 'world')
+  expect(session.target('back')).toEqual({ path: 'world/renamed.md', position: 3 })
+  expect(session.recents).toContain('world/nested/b.md')
+  session.travel('back', { path: 'world/nested/b.md', position: 9 })
+  expect(session.target('forward')).toEqual({ path: 'world/nested/b.md', position: 9 })
+  session.remove('world')
+  expect(session.recents).toEqual(['outside.md'])
+  expect(session.target('back')).toBeUndefined()
+  expect(session.target('forward')).toEqual({ path: 'outside.md', position: 4 })
+})

@@ -9,6 +9,8 @@ import {
   type NavigationLocation,
   type NavigationDirection
 } from '../navigation/session'
+import { isWithinPath, remapPath } from '../../../shared/workspace-paths'
+import type { WorkspaceChange, WorkspaceMutation, WorkspaceResult } from '../../../shared/api'
 import type { MarginAPI, DocumentSnapshot } from '../../../shared/api'
 
 type DocumentStatus = 'saved' | 'dirty' | 'saving' | 'conflict' | 'missing' | 'error'
@@ -36,6 +38,8 @@ export interface EditorPresentation {
 export class EditorController {
   private headingVersion = 0
   private headingSource: { path: string; doc: Text; version: number } | null = null
+  private changingWorkspace = false
+  private deferredRefresh = false
   private navigation = new NavigationSession()
   private sessions = new Map<string, EditorSession>()
   private view: EditorView | null = null
@@ -145,6 +149,91 @@ export class EditorController {
     const path = this.presentation.path
     const session = path ? this.sessions.get(path) : undefined
     return path && session ? { path, position: session.state.selection.main.head } : null
+  }
+
+  applyWorkspaceOperation(operation: WorkspaceChange['operation']): void {
+    if (!operation) return
+    this.generation++
+    if (operation.kind === 'rename') {
+      for (const [path, session] of [...this.sessions]) {
+        if (!isWithinPath(path, operation.from)) continue
+        clearTimeout(session.timer)
+        this.sessions.delete(path)
+        const next = remapPath(path, operation.from, operation.to)
+        this.sessions.set(next, session)
+        this.schedule(next, session)
+      }
+      this.navigation.remap(operation.from, operation.to)
+      if (this.headingSource)
+        this.headingSource.path = remapPath(this.headingSource.path, operation.from, operation.to)
+      if (this.presentation.path)
+        this.present({ path: remapPath(this.presentation.path, operation.from, operation.to) })
+    } else {
+      this.navigation.remove(operation.path)
+      for (const [path, session] of this.sessions) {
+        if (!isWithinPath(path, operation.path)) continue
+        clearTimeout(session.timer)
+        this.sessions.delete(path)
+      }
+      if (this.headingSource && isWithinPath(this.headingSource.path, operation.path))
+        this.headingSource = null
+      if (this.presentation.path && isWithinPath(this.presentation.path, operation.path)) {
+        this.present({ path: null, status: 'idle', error: '', openError: '' })
+        this.view?.setState(this.state(''))
+      }
+    }
+    this.presentNavigation()
+  }
+
+  async changeWorkspaceItem(
+    path: string,
+    operation: 'rename' | 'trash',
+    execute: () => Promise<WorkspaceResult<WorkspaceMutation | null>>
+  ): Promise<WorkspaceResult<WorkspaceMutation | null>> {
+    if (this.locked)
+      return {
+        ok: false,
+        error: { code: 'changed', message: 'Wait for the current operation to finish.' }
+      }
+    this.setLocked(true)
+    const blocked: WorkspaceResult<WorkspaceMutation | null> = {
+      ok: false,
+      error: {
+        code: 'changed',
+        message: `Resolve or save the affected document before ${operation === 'rename' ? 'renaming this item' : 'moving this item to Trash'}.`
+      }
+    }
+    try {
+      const affected = [...this.sessions.keys()].filter((cached) => isWithinPath(cached, path))
+      for (const cached of affected) {
+        const session = this.sessions.get(cached)!
+        if (session.saving) await session.saving
+        await this.refresh([cached])
+        if (['conflict', 'missing', 'error'].includes(session.status)) return blocked
+        if (!(await this.save(cached))) return blocked
+      }
+      // Delay watcher refreshes until old cache keys have been remapped or removed.
+      this.changingWorkspace = true
+      const result = await execute()
+      if (result.ok && result.value) this.applyWorkspaceOperation(result.value.change.operation)
+      return result
+    } catch (error) {
+      console.error('Workspace item operation failed.', error)
+      return {
+        ok: false,
+        error: {
+          code: 'filesystem',
+          message: 'Could not change this item. Check that the folder is accessible and try again.'
+        }
+      }
+    } finally {
+      this.changingWorkspace = false
+      this.setLocked(false)
+      if (this.deferredRefresh) {
+        this.deferredRefresh = false
+        await this.refresh()
+      }
+    }
   }
 
   async headings(signal?: AbortSignal): Promise<HeadingSnapshot | null> {
@@ -363,6 +452,10 @@ export class EditorController {
   }
 
   async refresh(paths: readonly string[] = [...this.sessions.keys()]): Promise<void> {
+    if (this.changingWorkspace) {
+      this.deferredRefresh = true
+      return
+    }
     await Promise.all(
       paths.map(async (path) => {
         const session = this.sessions.get(path)

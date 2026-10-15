@@ -322,3 +322,129 @@ test('heading jump refuses stale positions after edits or workspace reset', asyn
   controller.reset()
   expect(controller.jumpToHeading(snapshot!.version, 0)).toBe(false)
 })
+
+const renamed = (
+  from: string,
+  to: string
+): import('../../../shared/api').WorkspaceResult<
+  import('../../../shared/api').WorkspaceMutation
+> => ({
+  ok: true,
+  value: {
+    entry: { path: to, kind: 'file' },
+    change: {
+      workspace: {
+        root: '/test',
+        version: 1,
+        name: 'test',
+        files: [to],
+        directories: [],
+        warnings: []
+      },
+      changedPaths: [to],
+      operation: { kind: 'rename', from, to }
+    }
+  }
+})
+
+test('rename flushes dirty content first and preserves active selection, undo and future autosave path', async () => {
+  const view = views[0]
+  view.dispatch({ changes: { from: 0, insert: 'Local ' }, selection: { anchor: 4 } })
+  const save = deferred<SaveResult>()
+  api.save.mockReturnValueOnce(save.promise)
+  const execute = vi.fn(async () => renamed('a.md', 'renamed.md'))
+  const changing = controller.changeWorkspaceItem('a.md', 'rename', execute)
+  await vi.advanceTimersByTimeAsync(0)
+  expect(execute).not.toHaveBeenCalled()
+  expect(api.save).toHaveBeenCalledWith(
+    expect.objectContaining({ path: 'a.md', content: 'Local # Original' })
+  )
+  api.read.mockResolvedValue({ path: 'renamed.md', content: 'Local # Original', revision: 'local' })
+  save.resolve({ kind: 'saved', revision: 'local' })
+  expect((await changing).ok).toBe(true)
+  expect(execute).toHaveBeenCalledOnce()
+  expect(controller.location()).toEqual({ path: 'renamed.md', position: 4 })
+  expect(view.state.sliceDoc()).toBe('Local # Original')
+  expect(undoDepth(view.state)).toBe(1)
+  view.dispatch({ changes: { from: 0, insert: 'More ' } })
+  await vi.advanceTimersByTimeAsync(650)
+  expect(api.save).toHaveBeenLastCalledWith(expect.objectContaining({ path: 'renamed.md' }))
+})
+
+test.each(['rename', 'trash'] as const)(
+  '%s blocks conflict, missing and failed-save sessions',
+  async (operation) => {
+    const execute = vi.fn(async () => renamed('a.md', 'b.md'))
+    views[0].dispatch({ changes: { from: 0, insert: 'Dirty ' } })
+    api.read.mockResolvedValue({ ...original, content: 'External', revision: 'B' })
+    await controller.refresh()
+    expect((await controller.changeWorkspaceItem('a.md', operation, execute)).ok).toBe(false)
+    expect(execute).not.toHaveBeenCalled()
+    api.read.mockRejectedValue(new Error('ENOENT'))
+    await controller.refresh()
+    expect((await controller.changeWorkspaceItem('a.md', operation, execute)).ok).toBe(false)
+    expect(execute).not.toHaveBeenCalled()
+    controller.reset()
+    api.read.mockResolvedValue(original)
+    await controller.open('a.md')
+    views[0].dispatch({ changes: { from: 0, insert: 'Dirty ' } })
+    api.save.mockRejectedValue(new Error('EACCES'))
+    await vi.advanceTimersByTimeAsync(650)
+    expect(controller.snapshot().status).toBe('error')
+    expect((await controller.changeWorkspaceItem('a.md', operation, execute)).ok).toBe(false)
+    expect(execute).not.toHaveBeenCalled()
+  }
+)
+
+test('folder rename remaps active/cached documents, heading source, recents and Back/Forward', async () => {
+  api.read.mockImplementation(async (path) => ({ path, content: '# Heading', revision: 'same' }))
+  await controller.open('folder/a.md')
+  views[0].dispatch({ selection: { anchor: 3 } })
+  await controller.open('folder/nested/b.md')
+  const heading = await controller.headings()
+  views[0].dispatch({ selection: { anchor: 6 } })
+  controller.applyWorkspaceOperation({ kind: 'rename', from: 'folder', to: 'world' })
+  expect(controller.location()).toEqual({ path: 'world/nested/b.md', position: 6 })
+  expect(controller.snapshot().recents).toEqual(['world/nested/b.md', 'world/a.md', 'a.md'])
+  expect(controller.jumpToHeading(heading!.version, 0)).toBe(true)
+  await controller.navigate('back')
+  expect(controller.location()).toEqual({ path: 'world/nested/b.md', position: 6 })
+  await controller.navigate('back')
+  expect(controller.location()).toEqual({ path: 'world/a.md', position: 3 })
+  await controller.navigate('forward')
+  expect(controller.location()?.path).toBe('world/nested/b.md')
+})
+
+test('Trash flushes cached descendants, closes affected active documents and purges navigation', async () => {
+  api.read.mockImplementation(async (path) => ({ ...original, path }))
+  await controller.open('folder/a.md')
+  views[0].dispatch({ changes: { from: 0, insert: 'Draft ' } })
+  const execute = vi.fn(async () => ({
+    ok: true as const,
+    value: {
+      entry: { path: 'folder', kind: 'directory' as const },
+      change: {
+        workspace: {
+          root: '/test',
+          version: 1,
+          name: 'test',
+          files: [],
+          directories: [],
+          warnings: []
+        },
+        changedPaths: [],
+        operation: { kind: 'trash' as const, path: 'folder' }
+      }
+    }
+  }))
+  await controller.changeWorkspaceItem('folder', 'trash', execute)
+  expect(api.save).toHaveBeenCalledWith(
+    expect.objectContaining({ path: 'folder/a.md', content: 'Draft # Original' })
+  )
+  expect(execute).toHaveBeenCalledOnce()
+  expect(controller.snapshot().path).toBeNull()
+  expect(controller.snapshot().recents).not.toContain('folder/a.md')
+  api.save.mockClear()
+  await vi.advanceTimersByTimeAsync(1300)
+  expect(api.save).not.toHaveBeenCalled()
+})
