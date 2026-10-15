@@ -1,11 +1,17 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { Workspace } from '../../shared/api'
 import { EditorController } from './editor/controller'
 import { EditorSurface } from './editor/EditorSurface'
 import type { AppearanceSettings } from '../../shared/appearance'
 import { applyAppearance } from './appearance'
 import { SettingsDialog } from './components/SettingsDialog'
-import { commandTooltip, shellCommandForKey, type ShellCommandId } from './commands'
+import {
+  createCommandRegistry,
+  commandDefinitions,
+  commandTooltip,
+  commandForKey,
+  type CommandId
+} from './commands'
 import { Icon } from './components/Icon'
 import { FileTree } from './components/FileTree'
 
@@ -76,24 +82,49 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       controller.setLocked(false)
     }
   }, [controller])
-  const executeCommand = useCallback(
-    (id: ShellCommandId): void => {
-      if (id === 'workspace.open') {
-        if (!busy && !editor.locked) void openFolder()
-      }
-      if (id === 'workspace.toggle-files' && workspace) {
-        setFilesExpanded(!filesExpanded)
-        if (filesExpanded) {
-          if (editor.path) controller.focus()
-          else filesToggle.current?.focus()
+  const toggleFiles = useCallback((): void => {
+    setFilesExpanded(!filesExpanded)
+    if (filesExpanded) {
+      if (editor.path) controller.focus()
+      else filesToggle.current?.focus()
+    }
+  }, [filesExpanded, editor.path, controller])
+  const commands = useMemo(
+    () =>
+      // The registry stores handlers; it never invokes them during render.
+      // eslint-disable-next-line react-hooks/refs
+      createCommandRegistry([
+        {
+          id: 'workspace.open',
+          ...commandDefinitions['workspace.open'],
+          isEnabled: () => !busy && !editor.locked,
+          execute: openFolder
+        },
+        {
+          id: 'workspace.toggle-files',
+          ...commandDefinitions['workspace.toggle-files'],
+          isEnabled: () => Boolean(workspace) && !busy && !editor.locked,
+          execute: toggleFiles
+        },
+        {
+          id: 'settings.open',
+          ...commandDefinitions['settings.open'],
+          isEnabled: () => !busy && !editor.locked,
+          execute: () => {
+            setFilesExpanded(false)
+            setSettingsOpen(true)
+          }
         }
-      }
-      if (id === 'settings.open') {
-        setFilesExpanded(false)
-        setSettingsOpen(true)
-      }
+      ]),
+    [busy, editor.locked, workspace, openFolder, toggleFiles]
+  )
+  const executeCommand = useCallback(
+    (id: CommandId): void => {
+      void commands.execute(id).catch(() => {
+        setError(`Could not execute “${commandDefinitions[id].title}”. Try again.`)
+      })
     },
-    [busy, editor.locked, editor.path, controller, filesExpanded, openFolder, workspace]
+    [commands]
   )
   useEffect(() => {
     if (filesExpanded)
@@ -108,7 +139,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
         filesToggle.current?.focus()
         return
       }
-      const command = shellCommandForKey(event)
+      const command = commandForKey(event)
       if (command) {
         event.preventDefault()
         executeCommand(command)
@@ -164,7 +195,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
             ref={filesToggle}
             className="icon-button"
             aria-label="Toggle files"
-            disabled={!workspace}
+            disabled={!commands.get('workspace.toggle-files')?.isEnabled()}
             title={commandTooltip('workspace.toggle-files')}
             aria-expanded={filesExpanded}
             aria-controls={workspace ? 'workspace-files' : undefined}
@@ -176,6 +207,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
             className="icon-button settings-toggle"
             aria-label="Settings"
             title={commandTooltip('settings.open')}
+            disabled={!commands.get('settings.open')?.isEnabled()}
             onClick={() => executeCommand('settings.open')}
           >
             <Icon name="settings" />
