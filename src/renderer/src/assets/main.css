@@ -279,6 +279,7 @@ input:disabled,
 }
 .settings-dialog::backdrop {
   background: var(--margin-backdrop);
+  backdrop-filter: blur(4px);
 }
 .settings-heading,
 .settings-footer {

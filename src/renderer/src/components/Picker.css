@@ -15,6 +15,7 @@
 }
 .picker::backdrop {
   background: var(--margin-backdrop);
+  backdrop-filter: blur(4px);
 }
 .picker-input {
   width: 100%;
