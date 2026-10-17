@@ -101,6 +101,7 @@ export interface MarginAPI {
     save(settings: AppearanceSettings): Promise<void>
   }
   window: {
+    customTitleBar: boolean
     platform: string
     setTheme(theme: ThemeName): Promise<void>
     onClosing(callback: () => void): () => void

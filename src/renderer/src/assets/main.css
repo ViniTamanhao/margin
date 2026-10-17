@@ -9,12 +9,21 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  min-height: max(36px, var(--control-height));
+  min-height: var(--control-height);
   flex-shrink: 0;
-  padding: 0 calc(100vw - env(titlebar-area-width, 100vw) + var(--space-sm)) 0 var(--space-md);
-  app-region: drag;
+  padding: 0 var(--space-sm) 0 var(--space-md);
+  background: var(--margin-bg);
+  color: var(--margin-text);
   user-select: none;
   border-bottom: 1px solid var(--margin-border);
+}
+.app-shell[data-custom-title-bar='true'] .app-header {
+  min-height: max(36px, var(--control-height));
+  padding-inline-start: max(var(--space-md), env(titlebar-area-x, 0px));
+  padding-inline-end: calc(
+    100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + var(--space-sm)
+  );
+  app-region: drag;
 }
 .icon-button {
   display: inline-grid;
@@ -40,7 +49,7 @@
 .app-header button {
   app-region: no-drag;
 }
-.app-shell[data-platform='darwin'] .app-header {
+.app-shell[data-platform='darwin'][data-custom-title-bar='true'] .app-header {
   padding-inline-start: 80px;
 }
 .empty-state {
@@ -498,4 +507,19 @@ input:disabled,
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.setting-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.setting-toggle input {
+  margin: 0;
+  accent-color: var(--margin-accent);
+}
+.setting-hint {
+  margin: var(--space-sm) 0 0;
+  font-size: var(--ui-font-size-sm);
+  color: var(--margin-text-muted);
 }

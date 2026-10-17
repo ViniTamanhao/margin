@@ -1,5 +1,8 @@
+export const customTitleBarArgument = '--margin-custom-title-bar'
+
 export type ThemeName = 'dark' | 'light'
 export interface AppearanceSettings {
+  customTitleBar: boolean
   theme: ThemeName
   fontFamily: string
   editorFontSize: number
@@ -15,6 +18,7 @@ export const fontSizeLimits = {
 } as const
 
 export const defaultAppearance: AppearanceSettings = {
+  customTitleBar: true,
   theme: 'dark',
   fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   editorFontSize: 18,
@@ -54,6 +58,9 @@ export function parseAppearance(input: unknown): AppearanceSettings | null {
     !/^[a-zA-Z0-9 ,"'-]+$/.test(value.fontFamily)
   )
     return null
+  const customTitleBar =
+    value.customTitleBar === undefined ? defaultAppearance.customTitleBar : value.customTitleBar
+  if (typeof customTitleBar !== 'boolean') return null
   const editorFontSize =
     value.editorFontSize === undefined ? defaultAppearance.editorFontSize : value.editorFontSize
   const uiFontSize =
@@ -63,5 +70,11 @@ export function parseAppearance(input: unknown): AppearanceSettings | null {
     if (!Number.isInteger(size) || size < fontSizeLimits[key].min || size > fontSizeLimits[key].max)
       return null
   }
-  return { theme: value.theme, fontFamily: value.fontFamily, editorFontSize, uiFontSize }
+  return {
+    customTitleBar,
+    theme: value.theme,
+    fontFamily: value.fontFamily,
+    editorFontSize,
+    uiFontSize
+  }
 }

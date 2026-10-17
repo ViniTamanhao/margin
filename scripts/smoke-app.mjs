@@ -29,6 +29,12 @@ async function run() {
     await app.whenReady()
     await until(() => BrowserWindow.getAllWindows().length > 0, 'window created')
     const window = BrowserWindow.getAllWindows()[0]
+    const overlayUpdates = []
+    const setTitleBarOverlay = window.setTitleBarOverlay.bind(window)
+    window.setTitleBarOverlay = (options) => {
+      overlayUpdates.push(options)
+      setTitleBarOverlay(options)
+    }
     window.webContents.on('console-message', (_event, _level, message) => {
       if (message.includes('Error')) console.error('Renderer:', message)
     })
@@ -164,7 +170,51 @@ async function run() {
         ),
         '#555555'
       )
-      console.log('PASS workspace, theme and font restored after process restart')
+      assert.equal(
+        await evaluate('window.margin.window.customTitleBar'),
+        false,
+        'restart uses saved native frame'
+      )
+      assert.equal(
+        await evaluate(
+          "getComputedStyle(document.querySelector('.app-header')).getPropertyValue('app-region')"
+        ),
+        'none',
+        'native toolbar is not draggable'
+      )
+      await click('Settings')
+      for (const [theme, background, foreground] of [
+        ['dark', 'rgb(30, 30, 30)', 'rgb(226, 226, 226)'],
+        ['light', 'rgb(250, 250, 250)', 'rgb(39, 39, 39)']
+      ]) {
+        await evaluate(`document.querySelector('input[name=theme][value=${theme}]').click()`)
+        await until(
+          async () => electron.nativeTheme.themeSource === theme,
+          'native frame theme preview'
+        )
+        assert.equal(
+          await evaluate("getComputedStyle(document.querySelector('.app-header')).backgroundColor"),
+          background
+        )
+        assert.equal(
+          await evaluate("getComputedStyle(document.querySelector('.app-header')).color"),
+          foreground
+        )
+        await screenshot(`native-title-bar-${theme}.png`)
+      }
+      assert.equal(overlayUpdates.length, 0, 'native frames never receive overlay updates')
+      await evaluate("document.querySelector('input[name=customTitleBar]').click()")
+      await click('Done')
+      await until(
+        async () => await evaluate("!document.querySelector('dialog')"),
+        'custom frame preference saved for next startup'
+      )
+      assert.equal(
+        await evaluate('window.margin.window.customTitleBar'),
+        false,
+        'saving keeps active native frame stable'
+      )
+      console.log('PASS workspace, themes, native title bar and typography restored after restart')
       window.close()
       await until(() => window.isDestroyed(), 'restored window closes')
       app.exit(0)
@@ -836,8 +886,8 @@ async function run() {
       )
       assert.equal(
         await evaluate("document.querySelectorAll('dialog input').length"),
-        5,
-        'settings contain theme, font family and two font sizes'
+        6,
+        'settings contain theme, typography and title bar preference'
       )
       await screenshot('settings-dark.png')
       await evaluate(
@@ -870,6 +920,13 @@ async function run() {
           await evaluate("getComputedStyle(document.documentElement).colorScheme === 'light'"),
         'immediate theme preview'
       )
+      assert.equal(electron.nativeTheme.themeSource, 'light', 'native chrome follows theme preview')
+      if (process.platform !== 'darwin')
+        assert.ok(
+          overlayUpdates.some((update) => update.symbolColor === '#272727'),
+          'custom controls use light-theme foreground'
+        )
+      await evaluate("document.querySelector('input[name=customTitleBar]').click()")
       await screenshot('settings.png')
       await evaluate("document.querySelector('dialog input[role=combobox]').focus()")
       await setInput('dialog input[role=combobox]', 'no such font')
@@ -903,6 +960,7 @@ async function run() {
         'dark',
         'cancel restores theme'
       )
+      assert.equal(electron.nativeTheme.themeSource, 'dark', 'cancel restores native theme')
       assert.equal(
         await evaluate("document.activeElement?.classList.contains('cm-content')"),
         true,
@@ -952,6 +1010,12 @@ async function run() {
       )
       await setInput('dialog input[name=editorFontSize]', '24')
       await setInput('dialog input[name=uiFontSize]', '16')
+      assert.equal(
+        await evaluate("document.querySelector('input[name=customTitleBar]').checked"),
+        true,
+        'cancel discards title bar change'
+      )
+      await evaluate("document.querySelector('input[name=customTitleBar]').click()")
       await click('Done')
       await until(
         async () => await evaluate("!document.querySelector('dialog')"),
@@ -970,9 +1034,16 @@ async function run() {
       const persisted = JSON.parse(await readFile(join(root, 'app-data/appearance.json'), 'utf8'))
       assert.equal(persisted.version, 1)
       const appearance = persisted.appearance
+      assert.equal(appearance.customTitleBar, false)
+      assert.equal(
+        await evaluate('window.margin.window.customTitleBar'),
+        true,
+        'frame style stays unchanged until restart'
+      )
       assert.equal(appearance.theme, 'light')
       assert.equal(appearance.fontFamily, 'Georgia, serif')
       assert.deepEqual(Object.keys(appearance).sort(), [
+        'customTitleBar',
         'editorFontSize',
         'fontFamily',
         'theme',
@@ -1008,6 +1079,12 @@ async function run() {
     }
   } catch (error) {
     const window = BrowserWindow.getAllWindows()[0]
+    const overlayUpdates = []
+    const setTitleBarOverlay = window.setTitleBarOverlay.bind(window)
+    window.setTitleBarOverlay = (options) => {
+      overlayUpdates.push(options)
+      setTitleBarOverlay(options)
+    }
     if (window) {
       console.error(await window.webContents.executeJavaScript('document.body.textContent'))
       await writeFile(join(root, 'failure.png'), (await window.capturePage()).toPNG())

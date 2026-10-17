@@ -13,7 +13,10 @@ test('validates the two themes and font family', () => {
     { fontFamily: '' },
     { fontFamily: '   ' },
     { fontFamily: 'a'.repeat(201) },
-    { fontFamily: 18 }
+    { fontFamily: 18 },
+    { customTitleBar: 'true' },
+    { customTitleBar: null },
+    { customTitleBar: 1 }
   ])
     expect(parseAppearance({ ...defaultAppearance, ...patch })).toBeNull()
   expect(parseAppearance(null)).toBeNull()
@@ -25,7 +28,13 @@ test('defaults to dark, serializes writes and persists independently of workspac
   try {
     expect(await service.read()).toEqual(defaultAppearance)
     const first = { ...defaultAppearance, theme: 'light' as const }
-    const last = { ...first, fontFamily: 'Georgia, serif', editorFontSize: 24, uiFontSize: 16 }
+    const last = {
+      ...first,
+      customTitleBar: false,
+      fontFamily: 'Georgia, serif',
+      editorFontSize: 24,
+      uiFontSize: 16
+    }
     await Promise.all([service.save(first), service.save(last)])
     expect(await new AppearanceService(file).read()).toEqual(last)
     await expect(service.save({ ...last, fontFamily: 'url(secret)' })).rejects.toThrow('Invalid')

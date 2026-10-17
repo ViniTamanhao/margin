@@ -258,7 +258,11 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
     }
   }, [controller, executeCommand, filesExpanded, shortcutsOpen, settingsOpen, picker])
   return (
-    <main className="app-shell" data-platform={window.margin.window.platform}>
+    <main
+      className="app-shell"
+      data-platform={window.margin.window.platform}
+      data-custom-title-bar={window.margin.window.customTitleBar}
+    >
       <header className="app-header">
         <span className="document-name" title={editor.path ?? undefined}>
           {editor.path ? editor.path.slice(editor.path.lastIndexOf('/') + 1) : ''}

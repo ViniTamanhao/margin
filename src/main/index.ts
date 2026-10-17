@@ -1,30 +1,48 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, nativeTheme } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { guardWindowClose } from './window-lifecycle'
 import { registerIPC } from './ipc'
-import { themes } from '../shared/appearance'
+import { customTitleBarArgument, themes } from '../shared/appearance'
+import { AppearanceService } from './services/appearance'
 
-function createWindow(): void {
-  // Create the browser window.
+// Track the active frame style separately from preferences saved for the next launch.
+const customTitleBarWindows = new WeakSet<BrowserWindow>()
+
+async function createWindow(): Promise<void> {
+  const appearance = await new AppearanceService(
+    join(app.getPath('userData'), 'appearance.json')
+  ).read()
+  nativeTheme.themeSource = appearance.theme
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
-    backgroundColor: themes.dark.bg,
+    backgroundColor: themes[appearance.theme].bg,
+    darkTheme: appearance.theme === 'dark',
     autoHideMenuBar: true,
-    titleBarStyle: 'hidden',
-    ...(process.platform === 'darwin'
-      ? { trafficLightPosition: { x: 12, y: 10 } }
-      : { titleBarOverlay: { color: '#00000000', symbolColor: themes.dark.text, height: 36 } }),
+    titleBarStyle: appearance.customTitleBar ? 'hidden' : 'default',
+    ...(appearance.customTitleBar
+      ? process.platform === 'darwin'
+        ? { trafficLightPosition: { x: 12, y: 10 } }
+        : {
+            titleBarOverlay: {
+              color: '#00000000',
+              symbolColor: themes[appearance.theme].text,
+              height: 36
+            }
+          }
+      : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      additionalArguments: appearance.customTitleBar ? [customTitleBarArgument] : [],
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
   })
 
+  if (appearance.customTitleBar) customTitleBarWindows.add(mainWindow)
   guardWindowClose(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
@@ -58,17 +76,21 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  const workspaces = registerIPC(app.getVersion(), join(app.getPath('userData'), 'state.json'))
+  const workspaces = registerIPC(
+    app.getVersion(),
+    join(app.getPath('userData'), 'state.json'),
+    (window) => customTitleBarWindows.has(window)
+  )
   app.on('will-quit', () => {
     void workspaces.close()
   })
 
-  createWindow()
+  void createWindow()
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) void createWindow()
   })
 })
 

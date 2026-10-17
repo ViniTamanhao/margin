@@ -1,4 +1,11 @@
-import { BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
+import {
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  shell,
+  type IpcMainInvokeEvent
+} from 'electron'
 import { dirname, join } from 'node:path'
 import {
   channels,
@@ -19,7 +26,11 @@ import { AppearanceService } from './services/appearance'
 import { ContentSearchService } from './services/content-search'
 import { DocumentService } from './services/documents'
 
-export function registerIPC(version: string, stateFile: string): WorkspaceService {
+export function registerIPC(
+  version: string,
+  stateFile: string,
+  hasCustomTitleBar: (window: BrowserWindow) => boolean
+): WorkspaceService {
   const workspaces = new WorkspaceService((path) => shell.trashItem(path))
   const state = new AppStateService(stateFile)
   const appearance = new AppearanceService(join(dirname(stateFile), 'appearance.json'))
@@ -56,6 +67,7 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
     app: { info: async () => ({ name: 'Margin', version }) },
     appearance: { read: () => appearance.read(), save: (settings) => appearance.save(settings) },
     window: {
+      customTitleBar: true,
       platform: process.platform,
       setTheme: async () => {},
       onClosing: () => () => {},
@@ -131,8 +143,9 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
     trusted(event)
     if (theme !== 'dark' && theme !== 'light') throw new Error('Invalid window theme.')
     const window = BrowserWindow.fromWebContents(event.sender)
+    nativeTheme.themeSource = theme
     window?.setBackgroundColor(themes[theme].bg)
-    if (process.platform !== 'darwin')
+    if (window && process.platform !== 'darwin' && hasCustomTitleBar(window))
       window?.setTitleBarOverlay({ color: '#00000000', symbolColor: themes[theme].text })
   })
   ipcMain.handle(channels.appearanceRead, (event) => {

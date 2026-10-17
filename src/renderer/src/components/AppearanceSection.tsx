@@ -52,6 +52,22 @@ export function AppearanceSection({
           ))}
         </div>
       </fieldset>
+      <fieldset disabled={saving} className="settings-group">
+        <legend>Window</legend>
+        <label className="setting-toggle">
+          <input
+            type="checkbox"
+            name="customTitleBar"
+            checked={draft.customTitleBar}
+            aria-describedby="title-bar-hint"
+            onChange={(event) => onChange({ ...draft, customTitleBar: event.target.checked })}
+          />
+          Use custom title bar
+        </label>
+        <p id="title-bar-hint" className="setting-hint">
+          Restart Margin to apply title bar changes.
+        </p>
+      </fieldset>
     </>
   )
 }
