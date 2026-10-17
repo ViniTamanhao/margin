@@ -64,6 +64,10 @@ export class WorkspaceService {
     await watcher?.close()
   }
 
+  isCurrentRoot(root: string): boolean {
+    return this.workspace?.root === root
+  }
+
   current(): Workspace | null {
     return this.workspace
       ? {

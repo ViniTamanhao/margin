@@ -4,6 +4,9 @@ import { join } from 'node:path'
 import assert from 'node:assert/strict'
 
 const { app, BrowserWindow, dialog } = electron
+const { checkWindowControls } = await import('./smoke-window.mjs')
+const { instrumentSearchIPC } = await import('./smoke-polish.mjs')
+const searchProbe = instrumentSearchIPC(electron.ipcMain)
 const root = process.env.MARGIN_SMOKE_ROOT
 if (!root) throw new Error('Run this through pnpm test:smoke.')
 app.setPath('userData', join(root, 'app-data'))
@@ -104,6 +107,20 @@ async function run() {
       )
       console.log('PASS missing previous workspace')
       app.exit(0)
+    } else if (process.env.MARGIN_SMOKE_MODE === 'polish') {
+      const { runSearchPolish } = await import('./smoke-polish.mjs')
+      await runSearchPolish({
+        window,
+        evaluate,
+        until,
+        screenshot,
+        root,
+        dialog,
+        probe: searchProbe
+      })
+      window.close()
+      await until(() => window.isDestroyed(), 'polish window closes')
+      app.exit(0)
     } else if (process.env.MARGIN_SMOKE_MODE === 'files') {
       const { runFileOperations } = await import('./smoke-files.mjs')
       await runFileOperations({
@@ -134,7 +151,7 @@ async function run() {
         await evaluate(
           "getComputedStyle(document.documentElement).getPropertyValue('--editor-font-size').trim()"
         ),
-        '18px'
+        '24px'
       )
       assert.equal(
         await evaluate(
@@ -148,7 +165,8 @@ async function run() {
         ),
         '#555555'
       )
-      console.log('PASS workspace, theme and font restored after process restart')
+      await checkWindowControls({ window, evaluate, until, screenshot })
+      console.log('PASS workspace, theme, font and window controls restored after process restart')
       window.close()
       await until(() => window.isDestroyed(), 'restored window closes')
       app.exit(0)
@@ -156,16 +174,16 @@ async function run() {
       assert.equal(await evaluate('getComputedStyle(document.documentElement).colorScheme'), 'dark')
       assert.equal(
         await evaluate("document.querySelector('.app-header').getBoundingClientRect().height"),
-        32
+        36
       )
       assert.equal(
         await evaluate("document.querySelector('.navigation-rail').getBoundingClientRect().width"),
         40
       )
       assert.equal(
-        await evaluate("document.querySelector('.app-header .app-wordmark')?.textContent"),
-        'Margin',
-        'top bar shows the wordmark when no document is open'
+        await evaluate("Boolean(document.querySelector('.app-header .app-wordmark'))"),
+        false,
+        'title strip omits permanent branding'
       )
       assert.equal(
         await evaluate("getComputedStyle(document.querySelector('.navigation-rail')).borderRight"),
@@ -192,7 +210,7 @@ async function run() {
         await evaluate(
           "Array.from(document.querySelectorAll('.picker [role=option]')).map(item => item.textContent.split('Ctrl')[0])"
         ),
-        ['Open Folder', 'Settings'],
+        ['Keyboard Shortcuts', 'Open Folder', 'Settings', 'Toggle FullscreenF11'],
         'unavailable workspace, heading and history commands are hidden'
       )
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
@@ -343,9 +361,9 @@ async function run() {
         'header shows only basename'
       )
       assert.equal(
-        await evaluate("document.querySelector('.app-header .app-wordmark')?.textContent"),
-        'Margin',
-        'top bar keeps the wordmark when a document is open'
+        await evaluate("Boolean(document.querySelector('.app-header .app-wordmark'))"),
+        false,
+        'document title stays free of branding'
       )
       assert.equal(
         await evaluate("document.querySelector('.document-name').title"),
@@ -820,8 +838,8 @@ async function run() {
       )
       assert.equal(
         await evaluate("document.querySelectorAll('dialog input').length"),
-        3,
-        'settings contain only two theme radios and one font field'
+        5,
+        'settings contain theme, font family and two font sizes'
       )
       await screenshot('settings-dark.png')
       await evaluate(
@@ -855,6 +873,27 @@ async function run() {
         'immediate theme preview'
       )
       await screenshot('settings.png')
+      await evaluate("document.querySelector('dialog input[role=combobox]').focus()")
+      await setInput('dialog input[role=combobox]', 'no such font')
+      assert.equal(await evaluate("document.querySelectorAll('.font-option').length"), 0)
+      assert.equal(
+        await evaluate("document.querySelector('.font-picker [role=status]').textContent"),
+        'No matching fonts'
+      )
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+      await until(
+        async () =>
+          await evaluate(
+            "document.querySelector('[role=combobox]').getAttribute('aria-expanded') === 'false'"
+          ),
+        'Escape closes font dropdown'
+      )
+      assert.equal(
+        await evaluate("document.querySelector('dialog').open"),
+        true,
+        'first Escape keeps Settings open'
+      )
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
       window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
       await until(
@@ -880,7 +919,41 @@ async function run() {
           input.dispatchEvent(new Event('input', { bubbles: true }));
         })()`)
       }
-      await setInput('dialog input:not([type])', 'Georgia, serif')
+      async function selectFont(query) {
+        await evaluate("document.querySelector('dialog input[role=combobox]').focus()")
+        await setInput('dialog input[role=combobox]', query)
+        assert.equal(
+          await evaluate("document.querySelectorAll('.font-option').length"),
+          1,
+          'font search filters options'
+        )
+        window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' })
+        window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' })
+        await until(
+          async () =>
+            await evaluate(
+              "document.querySelector('[role=combobox]').getAttribute('aria-expanded') === 'false'"
+            ),
+          'Enter selects font'
+        )
+      }
+      await selectFont('Georgia')
+      await evaluate("document.querySelector('dialog input[role=combobox]').click()")
+      assert.equal(
+        await evaluate("document.querySelector('[role=combobox]').getAttribute('aria-expanded')"),
+        'true',
+        'selected dropdown reopens by click'
+      )
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Down' })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Down' })
+      assert.equal(
+        await evaluate(
+          "document.querySelector('[role=combobox]').hasAttribute('aria-activedescendant')"
+        ),
+        true
+      )
+      await setInput('dialog input[name=editorFontSize]', '24')
+      await setInput('dialog input[name=uiFontSize]', '16')
       await click('Done')
       await until(
         async () => await evaluate("!document.querySelector('dialog')"),
@@ -890,18 +963,27 @@ async function run() {
         await evaluate(
           "getComputedStyle(document.documentElement).getPropertyValue('--editor-font-size').trim()"
         ),
-        '18px'
+        '24px'
+      )
+      assert.equal(
+        await evaluate("getComputedStyle(document.querySelector('.app-header')).fontSize"),
+        '16px'
       )
       const persisted = JSON.parse(await readFile(join(root, 'app-data/appearance.json'), 'utf8'))
       assert.equal(persisted.version, 1)
       const appearance = persisted.appearance
       assert.equal(appearance.theme, 'light')
       assert.equal(appearance.fontFamily, 'Georgia, serif')
-      assert.deepEqual(Object.keys(appearance).sort(), ['fontFamily', 'theme'])
+      assert.deepEqual(Object.keys(appearance).sort(), [
+        'editorFontSize',
+        'fontFamily',
+        'theme',
+        'uiFontSize'
+      ])
       await screenshot('light.png')
       const intentionalSerif = "'Iowan Old Style', 'Palatino Linotype', Georgia, serif"
       await click('Settings')
-      await setInput('dialog input:not([type])', intentionalSerif)
+      await selectFont('Palatino')
       await click('Done')
       await until(
         async () => await evaluate("!document.querySelector('dialog')"),
@@ -916,7 +998,9 @@ async function run() {
         'Promise.race([new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))), new Promise(resolve => setTimeout(resolve, 500))])'
       )
       await screenshot('screenshot.png')
-      window.close()
+      if (process.platform === 'linux')
+        await evaluate('document.querySelector(\'[aria-label="Close window"]\').click()')
+      else await evaluate("window.margin.window.action('close')")
       await until(() => window.isDestroyed(), 'close flush completed')
       assert.ok(
         (await readFile(join(root, 'workspace/nested/b.md'), 'utf8')).includes('flush before close')

@@ -2,6 +2,10 @@ export function Icon({
   name
 }: {
   name:
+    | 'minimize'
+    | 'maximize'
+    | 'restore'
+    | 'keyboard'
     | 'folder'
     | 'files'
     | 'settings'
@@ -12,6 +16,10 @@ export function Icon({
     | 'new-folder'
 }): React.JSX.Element {
   const paths = {
+    minimize: 'M6 12h12',
+    maximize: 'M6 6h12v12H6V6Z',
+    restore: 'M9 6h9v9M6 9h9v9H6V9Z',
+    keyboard: 'M3 6h18v12H3V6Zm3 3h1m3 0h1m3 0h1m3 0h.1M6 12h1m3 0h1m3 0h1m3 0h.1M8 15h8',
     'new-file': 'M6 3h9l4 4v14H6V3Zm9 0v5h4M9 14h7M12.5 10.5v7',
     'new-folder': 'M3 7V5h6l2 2h10v12H3V7Zm0 3h18M9 14h6M12 11v6',
     folder: 'M3 7V5h6l2 2h10v12H3V7Zm0 3h18',

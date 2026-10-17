@@ -2,14 +2,23 @@ export type ThemeName = 'dark' | 'light'
 export interface AppearanceSettings {
   theme: ThemeName
   fontFamily: string
+  editorFontSize: number
+  uiFontSize: number
 }
 export interface PersistedAppearanceSettings {
   version: 1
   appearance: AppearanceSettings
 }
+export const fontSizeLimits = {
+  editorFontSize: { min: 12, max: 32 },
+  uiFontSize: { min: 11, max: 20 }
+} as const
+
 export const defaultAppearance: AppearanceSettings = {
   theme: 'dark',
-  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  editorFontSize: 18,
+  uiFontSize: 13
 }
 export const themes = {
   dark: {
@@ -45,5 +54,19 @@ export function parseAppearance(input: unknown): AppearanceSettings | null {
     !/^[a-zA-Z0-9 ,"'-]+$/.test(value.fontFamily)
   )
     return null
-  return { theme: value.theme, fontFamily: value.fontFamily }
+  const editorFontSize =
+    value.editorFontSize === undefined ? defaultAppearance.editorFontSize : value.editorFontSize
+  const uiFontSize =
+    value.uiFontSize === undefined ? defaultAppearance.uiFontSize : value.uiFontSize
+  for (const key of ['editorFontSize', 'uiFontSize'] as const) {
+    const size = key === 'editorFontSize' ? editorFontSize : uiFontSize
+    if (!Number.isInteger(size) || size < fontSizeLimits[key].min || size > fontSizeLimits[key].max)
+      return null
+  }
+  return {
+    theme: value.theme,
+    fontFamily: value.fontFamily,
+    editorFontSize,
+    uiFontSize
+  }
 }

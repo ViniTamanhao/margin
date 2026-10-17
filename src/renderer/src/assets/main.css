@@ -9,10 +9,57 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  height: var(--control-height);
+  min-height: var(--control-height);
   flex-shrink: 0;
   padding: 0 var(--space-sm) 0 var(--space-md);
+  background: var(--margin-bg);
+  color: var(--margin-text);
+  user-select: none;
   border-bottom: 1px solid var(--margin-border);
+}
+/* Keep OS drag, double-click zoom, edge snapping, and the system window menu. */
+.app-header {
+  min-height: max(36px, var(--control-height));
+  app-region: drag;
+}
+.app-shell[data-platform='win32'] .app-header {
+  padding-inline-start: max(var(--space-md), env(titlebar-area-x, 0px));
+  padding-inline-end: calc(
+    100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + var(--space-sm)
+  );
+}
+.app-shell[data-platform='win32'] .app-header[data-fullscreen='true'] {
+  padding-inline: var(--space-md) var(--space-sm);
+}
+.app-header[data-focused='false'] .document-name {
+  opacity: 0.7;
+}
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding-inline: var(--space-sm);
+  flex-shrink: 0;
+  app-region: no-drag;
+}
+.window-control {
+  display: grid;
+  place-items: center;
+  width: var(--icon-button-size);
+  height: var(--icon-button-size);
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--margin-text);
+}
+.window-control:enabled:hover,
+.window-control:enabled:active {
+  background: var(--margin-hover);
+}
+.window-control svg {
+  width: var(--space-md);
+  height: var(--space-md);
 }
 .icon-button {
   display: inline-grid;
@@ -34,6 +81,12 @@
 .icon-button[aria-expanded='true']:enabled:hover {
   color: var(--margin-text);
   background: var(--margin-selection);
+}
+.app-header button {
+  app-region: no-drag;
+}
+.app-shell[data-platform='darwin'] .app-header:not([data-fullscreen='true']) {
+  padding-inline-start: 80px;
 }
 .empty-state {
   flex: 1;
@@ -149,15 +202,6 @@
   min-width: 0;
   min-height: 0;
 }
-.app-wordmark {
-  flex-shrink: 0;
-  font-family: ui-monospace, monospace;
-  font-size: var(--ui-font-size-title);
-  font-weight: 600;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  color: var(--margin-text);
-}
 .document-name {
   flex: 1;
   min-width: 0;
@@ -206,8 +250,9 @@
 .editor-surface .cm-line {
   padding: 0;
 }
-.cm-editor .cm-selectionBackground,
-.cm-editor.cm-focused .cm-selectionBackground {
+/* Match CodeMirror's focused selector so its light default cannot override the theme. */
+.editor-surface .cm-editor .cm-selectionBackground,
+.editor-surface .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
   background: var(--margin-selection);
 }
 .cm-editor .cm-cursor {
@@ -259,7 +304,7 @@ input:disabled,
   }
 }
 
-.settings-toggle {
+.shortcuts-toggle {
   margin-top: auto;
 }
 .settings-dialog {
@@ -278,7 +323,8 @@ input:disabled,
   flex-direction: column;
 }
 .settings-dialog::backdrop {
-  background: color-mix(in srgb, var(--margin-bg) 75%, transparent);
+  background: var(--margin-backdrop);
+  backdrop-filter: blur(4px);
 }
 .settings-heading,
 .settings-footer {
@@ -328,6 +374,12 @@ input:disabled,
   gap: var(--space-xs);
   min-width: 0;
 }
+.setting-sizes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+}
 .setting-row input {
   min-height: var(--control-height);
   font: inherit;
@@ -349,7 +401,7 @@ input:disabled,
   gap: var(--space-xs);
   padding: var(--space-xs);
   border-radius: var(--radius-sm);
-  background: var(--margin-surface);
+  border: 1px solid var(--margin-border);
 }
 .theme-option {
   position: relative;
@@ -420,4 +472,76 @@ input:disabled,
 }
 .editor-surface .cm-content ::selection {
   background: var(--margin-selection);
+}
+
+/* Line typography stays stable when contextual source markers are revealed. */
+.cm-line.cm-md-heading {
+  line-height: 1.45;
+  padding-bottom: 0.2em;
+}
+.cm-line.cm-md-h1 {
+  font-size: 1.55em;
+  font-weight: 650;
+  padding-top: 0.7em;
+}
+.cm-line.cm-md-h2 {
+  font-size: 1.35em;
+  font-weight: 650;
+  padding-top: 0.65em;
+}
+.cm-line.cm-md-h3 {
+  font-size: 1.18em;
+  font-weight: 600;
+  padding-top: 0.5em;
+}
+.cm-line.cm-md-h4 {
+  font-size: 1.08em;
+  font-weight: 600;
+  padding-top: 0.4em;
+}
+.cm-line.cm-md-h5 {
+  font-size: 1em;
+  font-weight: 600;
+  padding-top: 0.3em;
+}
+.cm-line.cm-md-h6 {
+  font-size: 0.95em;
+  font-weight: 600;
+  padding-top: 0.3em;
+  color: var(--margin-text-muted);
+}
+
+.shortcut-body {
+  padding: 0 var(--space-lg) var(--space-lg);
+  overflow: auto;
+}
+.shortcut-body h3 {
+  font-size: var(--ui-font-size);
+  color: var(--margin-text-muted);
+  margin-top: var(--space-lg);
+}
+.shortcut-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin: var(--space-sm) 0;
+}
+.shortcut-row dd {
+  margin: 0;
+  white-space: nowrap;
+}
+.shortcut-row kbd {
+  font: inherit;
+  color: var(--margin-text-muted);
+}
+.shortcut-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.picker-excerpt {
+  color: var(--margin-text-muted);
+  font-size: var(--ui-font-size-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
