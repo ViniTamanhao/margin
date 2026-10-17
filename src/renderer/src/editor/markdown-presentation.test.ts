@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest'
 import { EditorSelection, EditorState } from '@codemirror/state'
 import { markdown } from '@codemirror/lang-markdown'
-import { hiddenMarkdownMarkers } from './markdown-presentation'
+import { decorations, hiddenMarkdownMarkers } from './markdown-presentation'
 
 function state(doc: string, anchor = doc.length): EditorState {
   return EditorState.create({ doc, selection: { anchor }, extensions: [markdown()] })
@@ -77,4 +77,28 @@ test('syntax classification distinguishes all headings and excludes source looka
     }
   })
   expect(levels).toEqual([1, 2, 3, 4, 5, 6, 1, 2])
+})
+
+test.each([
+  ['Dragonfire\n==========', [1]],
+  ['Dragonfire\n----------', [2]],
+  ['Dragonfire\ncontinued\n----------', [2, 2]],
+  ['# One\n## Two\n### Three\n#### Four\n##### Five\n###### Six', [1, 2, 3, 4, 5, 6]]
+])('heading line decorations exclude Setext underlines: %s', (doc, levels) => {
+  const editor = state(doc)
+  const lines: { line: number; className: string }[] = []
+  decorations({ state: editor, visibleRanges: [{ from: 0, to: editor.doc.length }] }).between(
+    0,
+    editor.doc.length,
+    (from, to, decoration) => {
+      if (decoration.spec.class?.includes('cm-md-heading')) {
+        expect(to).toBe(from)
+        lines.push({ line: editor.doc.lineAt(from).number, className: decoration.spec.class })
+      }
+    }
+  )
+  expect(lines).toEqual(
+    levels.map((level, i) => ({ line: i + 1, className: `cm-md-heading cm-md-h${level}` }))
+  )
+  expect(editor.sliceDoc()).toBe(doc)
 })

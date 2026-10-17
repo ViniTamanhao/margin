@@ -55,7 +55,7 @@ export function markdownHeadingLevel(name: string): number | null {
   return match ? Number(match[1] ?? match[2]) : null
 }
 
-function decorations(view: EditorView): DecorationSet {
+export function decorations(view: Pick<EditorView, 'state' | 'visibleRanges'>): DecorationSet {
   const ranges = view.visibleRanges.flatMap(({ from, to }) =>
     hiddenMarkdownMarkers(view.state, from, to)
   )
@@ -72,7 +72,10 @@ function decorations(view: EditorView): DecorationSet {
       enter(node) {
         const level = markdownHeadingLevel(node.name)
         if (level) {
-          for (let line = view.state.doc.lineAt(node.from); line.from <= node.to;) {
+          const end = node.name.startsWith('SetextHeading')
+            ? view.state.doc.lineAt(node.to).from - 1
+            : node.to
+          for (let line = view.state.doc.lineAt(node.from); line.from <= end;) {
             const id = `heading:${line.from}`
             if (!seen.has(id)) {
               seen.add(id)
