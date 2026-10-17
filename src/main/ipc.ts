@@ -11,6 +11,7 @@ import {
   type WorkspaceMutation,
   type WorkspaceResult
 } from '../shared/api'
+import { themes } from '../shared/appearance'
 import { confirmWindowClose } from './window-lifecycle'
 import { WorkspaceService } from './services/workspace'
 import { AppStateService } from './services/app-state'
@@ -54,7 +55,12 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
   const api: MarginAPI = {
     app: { info: async () => ({ name: 'Margin', version }) },
     appearance: { read: () => appearance.read(), save: (settings) => appearance.save(settings) },
-    window: { onClosing: () => () => {}, confirmClose: async () => {} },
+    window: {
+      platform: process.platform,
+      setTheme: async () => {},
+      onClosing: () => () => {},
+      confirmClose: async () => {}
+    },
     workspace: {
       search: (request) => search.search(request, new AbortController().signal),
       cancelSearch: async () => {},
@@ -121,6 +127,14 @@ export function registerIPC(version: string, stateFile: string): WorkspaceServic
       throw new Error('Untrusted IPC sender.')
     }
   }
+  ipcMain.handle(channels.windowTheme, (event, theme: unknown) => {
+    trusted(event)
+    if (theme !== 'dark' && theme !== 'light') throw new Error('Invalid window theme.')
+    const window = BrowserWindow.fromWebContents(event.sender)
+    window?.setBackgroundColor(themes[theme].bg)
+    if (process.platform !== 'darwin')
+      window?.setTitleBarOverlay({ color: '#00000000', symbolColor: themes[theme].text })
+  })
   ipcMain.handle(channels.appearanceRead, (event) => {
     trusted(event)
     return appearance.read()

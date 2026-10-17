@@ -9,9 +9,11 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  height: var(--control-height);
+  min-height: max(36px, var(--control-height));
   flex-shrink: 0;
-  padding: 0 var(--space-sm) 0 var(--space-md);
+  padding: 0 calc(100vw - env(titlebar-area-width, 100vw) + var(--space-sm)) 0 var(--space-md);
+  app-region: drag;
+  user-select: none;
   border-bottom: 1px solid var(--margin-border);
 }
 .icon-button {
@@ -34,6 +36,12 @@
 .icon-button[aria-expanded='true']:enabled:hover {
   color: var(--margin-text);
   background: var(--margin-selection);
+}
+.app-header button {
+  app-region: no-drag;
+}
+.app-shell[data-platform='darwin'] .app-header {
+  padding-inline-start: 80px;
 }
 .empty-state {
   flex: 1;
@@ -148,15 +156,6 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-}
-.app-wordmark {
-  flex-shrink: 0;
-  font-family: ui-monospace, monospace;
-  font-size: var(--ui-font-size-title);
-  font-weight: 600;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  color: var(--margin-text);
 }
 .document-name {
   flex: 1;

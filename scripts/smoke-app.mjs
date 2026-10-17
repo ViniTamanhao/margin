@@ -172,16 +172,16 @@ async function run() {
       assert.equal(await evaluate('getComputedStyle(document.documentElement).colorScheme'), 'dark')
       assert.equal(
         await evaluate("document.querySelector('.app-header').getBoundingClientRect().height"),
-        32
+        36
       )
       assert.equal(
         await evaluate("document.querySelector('.navigation-rail').getBoundingClientRect().width"),
         40
       )
       assert.equal(
-        await evaluate("document.querySelector('.app-header .app-wordmark')?.textContent"),
-        'Margin',
-        'top bar shows the wordmark when no document is open'
+        await evaluate("Boolean(document.querySelector('.app-header .app-wordmark'))"),
+        false,
+        'title strip omits permanent branding'
       )
       assert.equal(
         await evaluate("getComputedStyle(document.querySelector('.navigation-rail')).borderRight"),
@@ -359,9 +359,9 @@ async function run() {
         'header shows only basename'
       )
       assert.equal(
-        await evaluate("document.querySelector('.app-header .app-wordmark')?.textContent"),
-        'Margin',
-        'top bar keeps the wordmark when a document is open'
+        await evaluate("Boolean(document.querySelector('.app-header .app-wordmark'))"),
+        false,
+        'document title stays free of branding'
       )
       assert.equal(
         await evaluate("document.querySelector('.document-name').title"),

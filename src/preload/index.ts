@@ -8,6 +8,8 @@ const api: MarginAPI = {
     save: (settings) => ipcRenderer.invoke(channels.appearanceSave, settings)
   },
   window: {
+    platform: process.platform,
+    setTheme: (theme) => ipcRenderer.invoke(channels.windowTheme, theme),
     onClosing: (callback) => {
       const listener = (): void => callback()
       ipcRenderer.on(channels.windowClosing, listener)

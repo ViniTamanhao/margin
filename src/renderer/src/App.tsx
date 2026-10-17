@@ -258,9 +258,8 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
     }
   }, [controller, executeCommand, filesExpanded, shortcutsOpen, settingsOpen, picker])
   return (
-    <main className="app-shell">
+    <main className="app-shell" data-platform={window.margin.window.platform}>
       <header className="app-header">
-        <span className="app-wordmark">Margin</span>
         <span className="document-name" title={editor.path ?? undefined}>
           {editor.path ? editor.path.slice(editor.path.lastIndexOf('/') + 1) : ''}
         </span>

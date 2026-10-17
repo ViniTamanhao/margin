@@ -1,4 +1,4 @@
-import type { AppearanceSettings } from './appearance'
+import type { AppearanceSettings, ThemeName } from './appearance'
 
 export const channels = {
   appInfo: 'app:info',
@@ -16,6 +16,7 @@ export const channels = {
   documentSave: 'document:save',
   documentSaveCopy: 'document:save-copy',
   workspaceChanged: 'workspace:changed',
+  windowTheme: 'window:theme',
   windowClosing: 'window:closing',
   windowConfirmClose: 'window:confirm-close'
 } as const
@@ -100,6 +101,8 @@ export interface MarginAPI {
     save(settings: AppearanceSettings): Promise<void>
   }
   window: {
+    platform: string
+    setTheme(theme: ThemeName): Promise<void>
     onClosing(callback: () => void): () => void
     confirmClose(saved: boolean): Promise<void>
   }

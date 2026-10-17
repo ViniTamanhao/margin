@@ -13,6 +13,10 @@ function createWindow(): void {
     show: false,
     backgroundColor: themes.dark.bg,
     autoHideMenuBar: true,
+    titleBarStyle: 'hidden',
+    ...(process.platform === 'darwin'
+      ? { trafficLightPosition: { x: 12, y: 10 } }
+      : { titleBarOverlay: { color: '#00000000', symbolColor: themes.dark.text, height: 36 } }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
