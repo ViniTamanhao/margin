@@ -250,8 +250,9 @@
 .editor-surface .cm-line {
   padding: 0;
 }
-.cm-editor .cm-selectionBackground,
-.cm-editor.cm-focused .cm-selectionBackground {
+/* Match CodeMirror's focused selector so its light default cannot override the theme. */
+.editor-surface .cm-editor .cm-selectionBackground,
+.editor-surface .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
   background: var(--margin-selection);
 }
 .cm-editor .cm-cursor {

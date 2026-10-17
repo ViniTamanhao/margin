@@ -112,6 +112,28 @@ export async function runSearchPolish({
   await evaluate(await readFile(join(root, 'editor-probe.js'), 'utf8'))
   const cursor = () => evaluate('window.marginEditorLocation()')
   await evaluate("document.querySelector('.cm-content').focus()")
+  await key('Home', ['control'])
+  await key('End', ['shift'])
+  const selectionColor = () =>
+    evaluate(`(() => {
+    const marker = document.querySelector('.cm-selectionBackground')
+    const expected = document.createElement('span')
+    expected.style.background = 'var(--margin-selection)'
+    document.body.append(expected)
+    const color = getComputedStyle(expected).backgroundColor
+    expected.remove()
+    return { actual: marker && getComputedStyle(marker).backgroundColor, expected: color }
+  })()`)
+  await until(async () => (await selectionColor()).actual !== null, 'editor draws text selection')
+  let colors = await selectionColor()
+  assert.equal(colors.actual, colors.expected, 'focused selection uses the theme color')
+  await evaluate('document.querySelector(\'[aria-label="Keyboard Shortcuts"]\').focus()')
+  colors = await selectionColor()
+  assert.equal(colors.actual, colors.expected, 'unfocused selection uses the theme color')
+  await evaluate("document.querySelector('.cm-content').focus()")
+  await key('Home', ['control'])
+  await key('Right')
+
   const previousCursor = await cursor()
 
   probe.reads.length = 0
