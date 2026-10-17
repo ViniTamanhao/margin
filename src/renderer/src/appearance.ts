@@ -1,8 +1,15 @@
 import { themes, type AppearanceSettings } from '../../shared/appearance'
 export function applyAppearance(settings: AppearanceSettings): void {
   const root = document.documentElement
+  if (root.style.colorScheme !== settings.theme) {
+    void window.margin.window.setTheme(settings.theme).catch((error: unknown) => {
+      console.warn('Could not update window appearance.', error)
+    })
+  }
   root.style.colorScheme = settings.theme
   for (const [key, color] of Object.entries(themes[settings.theme]))
     root.style.setProperty(`--margin-${key}`, color)
   root.style.setProperty('--editor-font-family', settings.fontFamily)
+  root.style.setProperty('--editor-font-size', `${settings.editorFontSize}px`)
+  root.style.setProperty('--ui-font-size', `${settings.uiFontSize}px`)
 }

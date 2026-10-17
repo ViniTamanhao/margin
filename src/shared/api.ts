@@ -1,9 +1,11 @@
-import type { AppearanceSettings } from './appearance'
+import type { AppearanceSettings, ThemeName } from './appearance'
 
 export const channels = {
   appInfo: 'app:info',
   appearanceRead: 'appearance:read',
   appearanceSave: 'appearance:save',
+  workspaceSearch: 'workspace:search',
+  workspaceCancelSearch: 'workspace:cancel-search',
   workspaceOpen: 'workspace:open',
   workspaceCurrent: 'workspace:current',
   workspaceCreateFile: 'workspace:create-file',
@@ -14,9 +16,23 @@ export const channels = {
   documentSave: 'document:save',
   documentSaveCopy: 'document:save-copy',
   workspaceChanged: 'workspace:changed',
+  windowState: 'window:state',
+  windowStateChanged: 'window:state-changed',
+  windowAction: 'window:action',
+  windowTheme: 'window:theme',
   windowClosing: 'window:closing',
   windowConfirmClose: 'window:confirm-close'
 } as const
+
+export type WindowAction = 'minimize' | 'toggle-maximize' | 'toggle-fullscreen' | 'close'
+export interface WindowState {
+  focused: boolean
+  maximized: boolean
+  fullscreen: boolean
+  minimizable: boolean
+  maximizable: boolean
+  fullscreenable: boolean
+}
 
 export interface AppInfo {
   name: string
@@ -76,6 +92,21 @@ export type SaveResult =
   | { kind: 'saved'; revision: string }
   | { kind: 'conflict'; current: DocumentSnapshot }
   | { kind: 'missing' }
+export interface WorkspaceSearchRequest {
+  root: string
+  query: string
+  requestId: string
+  limit?: number
+}
+export interface WorkspaceSearchResult {
+  path: string
+  line: number
+  column: number
+  position: number
+  length: number
+  preview: string
+  previewMatchStart: number
+}
 export interface MarginAPI {
   app: { info(): Promise<AppInfo> }
   appearance: {
@@ -83,10 +114,17 @@ export interface MarginAPI {
     save(settings: AppearanceSettings): Promise<void>
   }
   window: {
+    state(): Promise<WindowState>
+    onStateChanged(callback: (state: WindowState) => void): () => void
+    action(action: WindowAction): Promise<void>
+    platform: string
+    setTheme(theme: ThemeName): Promise<void>
     onClosing(callback: () => void): () => void
     confirmClose(saved: boolean): Promise<void>
   }
   workspace: {
+    search(request: WorkspaceSearchRequest): Promise<WorkspaceSearchResult[]>
+    cancelSearch(requestId: string): Promise<void>
     open(): Promise<Workspace | null>
     current(): Promise<Workspace | null>
     createFile(request: WorkspaceCreateRequest): Promise<WorkspaceResult<WorkspaceMutation>>

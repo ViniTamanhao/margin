@@ -6,9 +6,12 @@ export interface PickerItem {
   title: string
   subtitle?: string
   detail?: string
+  excerpt?: React.ReactNode
 }
 interface PickerProps<T extends PickerItem> {
   label: string
+  renderPreview?(item: T | undefined): React.ReactNode
+  onQueryChange?(query: string): void
   busy?: boolean
   emptyMessage: string
   getItems(query: string): readonly T[]
@@ -20,6 +23,8 @@ interface PickerProps<T extends PickerItem> {
 export function Picker<T extends PickerItem>({
   label,
   busy = false,
+  renderPreview,
+  onQueryChange,
   emptyMessage,
   getItems,
   onSelect,
@@ -59,13 +64,14 @@ export function Picker<T extends PickerItem>({
     onClose()
   }
   const select = (item: T): void => {
+    if (busy) return
     close()
     onSelect(item)
   }
   return (
     <dialog
       ref={dialog}
-      className="picker"
+      className={`picker ${renderPreview ? 'picker-with-preview' : ''}`}
       aria-label={label}
       onCancel={(event) => {
         event.preventDefault()
@@ -87,6 +93,7 @@ export function Picker<T extends PickerItem>({
         placeholder={label}
         onChange={(event) => {
           setQuery(event.target.value)
+          onQueryChange?.(event.target.value)
           setActiveId(null)
         }}
         onKeyDown={(event) => {
@@ -104,37 +111,48 @@ export function Picker<T extends PickerItem>({
           }
         }}
       />
-      <div
-        className="picker-results"
-        id={`${id}-results`}
-        role="listbox"
-        aria-label={label}
-        aria-busy={busy}
-      >
-        {items.map((item, index) => (
+      <div className="picker-body">
+        <div className="picker-list">
           <div
-            key={item.id}
-            id={optionId(index)}
-            role="option"
-            aria-selected={index === active}
-            className="picker-option"
-            onMouseMove={() => setActiveId(item.id)}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => select(item)}
+            className="picker-results"
+            id={`${id}-results`}
+            role="listbox"
+            aria-label={label}
+            aria-busy={busy}
           >
-            <span className="picker-option-text">
-              <span>{item.title}</span>
-              {item.subtitle && <span className="picker-subtitle">{item.subtitle}</span>}
-            </span>
-            {item.detail && <span className="picker-detail">{item.detail}</span>}
+            {items.map((item, index) => (
+              <div
+                key={item.id}
+                id={optionId(index)}
+                role="option"
+                aria-selected={index === active}
+                aria-disabled={busy || undefined}
+                className="picker-option"
+                onMouseMove={() => setActiveId(item.id)}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => select(item)}
+              >
+                <span className="picker-option-text">
+                  <span>{item.title}</span>
+                  {item.subtitle && <span className="picker-subtitle">{item.subtitle}</span>}
+                  {item.excerpt && <span className="picker-excerpt">{item.excerpt}</span>}
+                </span>
+                {item.detail && <span className="picker-detail">{item.detail}</span>}
+              </div>
+            ))}
           </div>
-        ))}
+          {!items.length && (
+            <p className="picker-empty" role="status">
+              {emptyMessage}
+            </p>
+          )}
+        </div>
+        {renderPreview && (
+          <aside className="picker-preview" aria-label="File preview">
+            {renderPreview(items[active])}
+          </aside>
+        )}
       </div>
-      {!items.length && (
-        <p className="picker-empty" role="status">
-          {emptyMessage}
-        </p>
-      )}
     </dialog>
   )
 }

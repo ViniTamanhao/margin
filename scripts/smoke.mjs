@@ -36,6 +36,19 @@ const probe = await build({
 const output = Array.isArray(probe) ? probe[0] : probe
 const chunk = output.output.find((entry) => entry.type === 'chunk')
 await writeFile(join(root, 'picker-probe.js'), chunk.code)
+const editorProbe = await build({
+  configFile: false,
+  logLevel: 'error',
+  build: {
+    write: false,
+    lib: { entry: 'scripts/fixtures/editor-probe.ts', formats: ['iife'], name: 'EditorProbe' }
+  }
+})
+const editorOutput = Array.isArray(editorProbe) ? editorProbe[0] : editorProbe
+await writeFile(
+  join(root, 'editor-probe.js'),
+  editorOutput.output.find((entry) => entry.type === 'chunk').code
+)
 async function run(mode) {
   await new Promise((resolve, reject) => {
     const environment = { ...process.env, MARGIN_SMOKE_ROOT: root, MARGIN_SMOKE_MODE: mode }
@@ -56,7 +69,8 @@ try {
     'initial',
     'files',
     'restore',
-    'missing'
+    'missing',
+    'polish'
   ]
   for (const mode of modes) {
     if (mode === 'missing') await rm(join(root, 'workspace'), { recursive: true, force: true })

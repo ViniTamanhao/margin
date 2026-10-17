@@ -1,0 +1,54 @@
+.font-picker-control {
+  position: relative;
+}
+.font-picker-control input {
+  padding-inline-end: var(--control-height);
+}
+.font-picker-control > svg {
+  position: absolute;
+  right: var(--space-sm);
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--margin-text-muted);
+}
+.font-picker-menu {
+  border: 1px solid var(--margin-border);
+  border-radius: var(--radius-sm);
+  background: var(--margin-surface);
+  overflow: hidden;
+}
+.font-picker-menu ul {
+  list-style: none;
+  padding: var(--space-xs);
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+}
+.font-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-height: var(--control-height);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.font-option.active {
+  background: var(--margin-selection);
+}
+.font-option-preview {
+  color: var(--margin-text-muted);
+  flex-shrink: 0;
+}
+.font-picker-menu p {
+  margin: 0;
+  padding: var(--space-sm);
+  color: var(--margin-text-muted);
+}
+.font-picker-hint {
+  border-top: 1px solid var(--margin-border);
+  font-size: var(--ui-font-size-sm);
+}

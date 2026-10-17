@@ -1,18 +1,35 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, nativeTheme } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { guardWindowClose } from './window-lifecycle'
 import { registerIPC } from './ipc'
 import { themes } from '../shared/appearance'
+import { observeWindowState } from './window-controls'
+import { AppearanceService } from './services/appearance'
 
-function createWindow(): void {
-  // Create the browser window.
+async function createWindow(): Promise<void> {
+  const appearance = await new AppearanceService(
+    join(app.getPath('userData'), 'appearance.json')
+  ).read()
+  nativeTheme.themeSource = appearance.theme
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
-    backgroundColor: themes.dark.bg,
+    backgroundColor: themes[appearance.theme].bg,
     autoHideMenuBar: true,
+    titleBarStyle: 'hidden',
+    ...(process.platform === 'darwin'
+      ? { trafficLightPosition: { x: 12, y: 10 } }
+      : process.platform === 'win32'
+        ? {
+            titleBarOverlay: {
+              color: themes[appearance.theme].bg,
+              symbolColor: themes[appearance.theme].text,
+              height: 36
+            }
+          }
+        : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
@@ -21,6 +38,7 @@ function createWindow(): void {
     }
   })
 
+  observeWindowState(mainWindow)
   guardWindowClose(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
@@ -59,12 +77,12 @@ app.whenReady().then(() => {
     void workspaces.close()
   })
 
-  createWindow()
+  void createWindow()
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) void createWindow()
   })
 })
 

@@ -36,7 +36,7 @@ export function SettingsDialog({
   }
   async function save(): Promise<void> {
     if (!parseAppearance(draft)) {
-      setError('Use a valid font family name.')
+      setError('Use a valid font family, editor size (12–32 px), and interface size (11–20 px).')
       return
     }
     setSaving(true)

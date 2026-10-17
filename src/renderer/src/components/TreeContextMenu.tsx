@@ -80,8 +80,12 @@ export function TreeContextMenu({
           }}
         >
           <span>{commandDefinitions[id].title}</span>
-          {id === 'workspace.rename' && <span className="tree-menu-shortcut">F2</span>}
-          {id === 'workspace.trash' && <span className="tree-menu-shortcut">Delete</span>}
+          {id === 'workspace.rename' && (
+            <span className="tree-menu-shortcut">{commandDefinitions[id].shortcut}</span>
+          )}
+          {id === 'workspace.trash' && (
+            <span className="tree-menu-shortcut">{commandDefinitions[id].shortcut}</span>
+          )}
         </button>
       ))}
     </div>

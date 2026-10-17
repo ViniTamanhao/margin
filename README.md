@@ -149,25 +149,33 @@ the destination from overwrite; stronger source/parent protection remains separa
 
 ## Appearance and Markdown presentation
 
-Settings contains only Light/Dark mode and an editor font-family field, both with
-live preview. Both themes use neutral gray surfaces, selections and focus accents.
-The editor defaults to system sans-serif at a fixed 18 px. Installed fonts and normal
-CSS font fallback lists are supported. Choose **Done** to save; Cancel/Escape restores
-the saved appearance. Old custom colors and font-size preferences are ignored and
-removed on the next save. Legacy unversioned files still migrate the exact former
+Settings contains Light/Dark mode, an editor font family, and separate editor
+(12–32 px) and interface (11–20 px) font sizes, all with live preview. Both themes use neutral gray surfaces, selections and focus accents.
+The editor defaults to system sans-serif at 18 px. The searchable font dropdown offers system, serif, monospace, and familiar font
+stacks, with a small preview. Fonts use local fallbacks when unavailable; no fonts
+are downloaded. Type to filter, use arrows and Enter to select, or Escape to dismiss
+the list before dismissing Settings. Existing custom font stacks remain selectable. Choose **Done** to save; Cancel/Escape restores
+the saved appearance. Existing settings without font sizes use 18 px editor and 13 px interface defaults.
+Obsolete custom colors and the legacy `fontSize` field are removed on the next save. Legacy unversioned files still migrate the exact former
 default serif stack to system sans; versioned files preserve intentional font choices.
 
 Files expands into a real grid column beside the editor with a short transition,
 then collapses after opening a file or using Escape/Ctrl/Cmd+B. It resizes the
-writing surface and supports reduced motion. The top bar shows a quiet document
-basename (full relative path in its tooltip), a persistent `Margin`
-wordmark on the left, and the folder action. The wordmark uses system monospace
-and follows the theme's text color.
+writing surface and supports reduced motion. A single draggable title strip shows a quiet document basename (full relative path
+in its tooltip) and the folder action, alongside native window controls. Electron
+hides the separate OS title text; no permanent wordmark is shown. Window controls
+follow theme previews and reserve their own space in the strip. The custom title bar is always enabled. Linux uses theme-colored, circular window
+controls (minimize, maximize/restore, close); Windows keeps its native control overlay
+and macOS keeps its traffic lights. The drag region retains OS dragging, double-click
+zoom and window-menu behavior. The maximize icon follows OS state changes. F11 or
+**Toggle Fullscreen** in the command palette enters/exits fullscreen; Linux controls
+hide and macOS traffic-light spacing collapses in fullscreen. Close always uses the
+existing save-before-close flow. Older title-bar preferences are ignored.
 Only Unsaved/Saving states use status space; Saved disappears.
 Conflict and error feedback remains in the writing pane.
 
-UI styles share a small token set in `assets/base.css`: a 13 px interface font,
-12 px navigation and helper text, 32 px controls, 28 px icon buttons, the existing
+UI styles share a small token set in `assets/base.css`: a default 13 px interface font,
+relative navigation and helper text sizes, controls and icon buttons that grow with text, the existing
 spacing scale, and 4 px control / 8 px dialog corners. File navigation uses padded
 rows with folder disclosure icons and indentation. Expansion is kept for the current
 workspace session; folder changes outside Margin update the tree. Empty messages and recovery actions have explicit spacing.
@@ -248,7 +256,8 @@ real Electron application against temporary files, substitutes deterministic nat
 dialog results, and checks editing, saving, conflicts, keyboard navigation, window
 closing, contextual syntax, Markdown clipboard behavior, appearance previews, focus
 restoration, Quick Open, palette execution, heading jumps, Back/Forward cursor
-restoration, deleted picker targets and workspace/settings restoration across
+restoration, deleted picker targets, active file/content previews, delayed-response
+races, heading typography, shortcut reference focus, and workspace/settings restoration across
 separate processes. It also bundles a test-only instrumented caller of the real
 Picker to check recomputation, and runs inline creation, rename/undo/history,
 context-menu, conflict-blocking and external watcher workflows. The Trash boundary
@@ -257,6 +266,36 @@ checked, including the unseen-folder warning. No personal files are moved to Tra
 It leaves its temporary artifacts and screenshots in the printed path for inspection.
 
 See [the Sessions 0–2 implementation report](docs/sessions-0-2-report.md) for decisions,
-validation, commit progression and remaining limits. Workspace content search,
-ripgrep, semantic indexing, backlinks, graphs, tabs, split panes, persistent navigation,
-configurable shortcuts, plugins, sync and AI remain deferred.
+validation, commit progression and remaining limits. Semantic indexing, backlinks,
+graphs, tabs, split panes, persistent navigation, configurable shortcuts, plugins,
+sync and AI remain deferred.
+
+## Content search and previews
+
+Quick Open (Ctrl/Cmd+P) searches filenames and relative paths only. Search Workspace
+(Ctrl/Cmd+Shift+F) searches literal text in Markdown files with smart case: lowercase
+queries ignore case, queries containing uppercase letters match case. Results are
+ordered by path, line and column, capped at 100 in the picker (200 at the API boundary).
+Each match carries a workspace-relative path, one-based line/column, and a zero-based
+CodeMirror UTF-16 position. Enter uses the existing navigation session, so Alt+Left
+restores the previous document and cursor.
+
+The replaceable main-process ContentSearchService streams the existing workspace
+file list, validates paths through WorkspaceService, excludes ignored folders and
+symlinks, and yields regularly. No new dependency or system binary is required.
+Bundled ripgrep is deferred until cross-platform binary distribution is established.
+Queries debounce for 100 ms; the typed IPC API explicitly cancels superseded work,
+and the picker rejects stale responses. Unreadable or externally removed files are
+skipped with a developer log; results reflect saved disk text, not unsaved buffers.
+
+Quick Open and content search share an optional Picker preview pane. Only the active
+file is read through document.read after 75 ms; late responses are discarded. Preview
+reads never touch editor sessions, recents, navigation or autosave. Source previews
+show the first 30 lines for files or eight context lines either side of a content
+match. Previews hide below 640 px. Opening a stale search result clamps its saved
+position to the current document; rerun search if external edits moved the match.
+
+Heading typography uses parsed ATX/Setext syntax and stable line decorations,
+independent of contextual marker replacement. The keyboard icon immediately above
+Settings opens a transient reference derived from command definitions; Files-panel
+shortcuts are contextual. Keybindings remain fixed.
