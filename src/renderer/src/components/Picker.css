@@ -78,6 +78,9 @@
 .picker-with-preview {
   width: min(940px, calc(100vw - var(--space-lg) * 2));
 }
+.picker-with-preview .picker-body {
+  height: min(420px, calc(100vh - 140px));
+}
 .picker-body {
   display: flex;
   min-height: 0;
@@ -88,30 +91,79 @@
   overflow: auto;
 }
 .picker-preview {
+  flex: 1.15;
+  min-width: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--margin-border);
+  background: var(--margin-surface);
+}
+.file-preview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.preview-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-height: var(--control-height);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--margin-border);
+  font-size: var(--ui-font-size-sm);
+}
+.preview-path {
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-location {
+  flex-shrink: 0;
+  color: var(--margin-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.preview-scroll {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
-  border-left: 1px solid var(--margin-border);
-  padding: var(--space-md);
+  scrollbar-gutter: stable;
+  padding-block: var(--space-sm);
 }
 .preview-source {
-  margin: 0;
-  font: inherit;
   font-family: var(--editor-font-family);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  font-size: var(--ui-font-size);
+  line-height: 1.65;
 }
 .preview-line {
-  display: block;
+  display: grid;
+  grid-template-columns: 5ch minmax(0, 1fr);
+  padding-inline: var(--space-sm) var(--space-md);
+  border-left: 2px solid transparent;
 }
 .preview-line-active {
   background: var(--margin-selection);
+  border-left-color: var(--margin-accent);
 }
 .preview-number {
-  display: inline-block;
-  width: 3em;
+  padding-right: var(--space-md);
+  text-align: right;
+  font-size: var(--ui-font-size-caption);
+  line-height: calc(var(--ui-font-size) * 1.65);
+  font-variant-numeric: tabular-nums;
   color: var(--margin-text-muted);
   user-select: none;
+}
+.preview-text {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+.preview-text mark {
+  border-radius: 2px;
+  box-shadow: 0 1px var(--margin-accent);
 }
 .picker mark {
   background: var(--margin-search-match);

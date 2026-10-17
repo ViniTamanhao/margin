@@ -121,6 +121,18 @@ export async function runSearchPolish({
     probe.reads.every((path) => path === 'a.md'),
     'unselected files are not previewed'
   )
+  const previewBounds = await evaluate(`(() => {
+    const rows = [...document.querySelectorAll('.preview-line')]
+    const text = rows.map(row => row.querySelector('.preview-text').getBoundingClientRect().left)
+    return { aligned: text.every(left => Math.abs(left - text[0]) < 1),
+      height: rows[0].getBoundingClientRect().height,
+      lineHeight: parseFloat(getComputedStyle(rows[0]).lineHeight) }
+  })()`)
+  assert.ok(previewBounds.aligned, 'preview text shares a column independent of line numbers')
+  assert.ok(
+    Math.abs(previewBounds.height - previewBounds.lineHeight) < 1,
+    'source rows have one line of height without extra newline spacing'
+  )
   const bounds = window.getBounds()
   window.setContentSize(480, 640)
   await until(
@@ -141,6 +153,21 @@ export async function runSearchPolish({
     probe.reads.includes('Dragonfire Mechanics.md'),
     'active preview is read through the typed boundary'
   )
+  const readsBeforeReturn = probe.reads.length
+  await key('Up')
+  await until(async () => (await preview()).includes('# First'), 'cached preview returns')
+  assert.equal(probe.reads.length, readsBeforeReturn, 'returning to a preview reuses picker cache')
+  probe.delays['Dragonfire Mechanics.md'] = 350
+  await key('Down')
+  assert.ok(
+    (await preview()).includes('# First'),
+    'prior preview stays visible until replacement is ready'
+  )
+  await until(
+    async () => (await preview()).includes('Dragonfire Mechanics'),
+    'replacement preview appears'
+  )
+  probe.delays = {}
   assert.equal(await title(), 'a.md', 'preview does not open a session')
   await screenshot('quick-open-preview.png')
   await key('Escape')
@@ -204,6 +231,44 @@ export async function runSearchPolish({
   assert.equal(
     await evaluate("document.querySelector('.preview-line-active mark')?.textContent"),
     'armor'
+  )
+  const stableHeight = await evaluate(
+    "document.querySelector('.picker').getBoundingClientRect().height"
+  )
+  probe.searchDelays.Magical = 350
+  await query('Magical')
+  assert.ok((await preview()).includes('armor'), 'query change retains the last complete preview')
+  assert.equal(
+    await evaluate("document.querySelector('.picker').getBoundingClientRect().height"),
+    stableHeight,
+    'query changes preserve picker geometry'
+  )
+  await key('Return')
+  assert.ok(
+    await evaluate("document.querySelector('.picker')?.open"),
+    'pending results cannot open a stale match'
+  )
+  await until(
+    async () =>
+      await evaluate(
+        "document.querySelector('[role=listbox]').getAttribute('aria-busy') === 'false'"
+      ),
+    'replacement search finishes'
+  )
+  await until(
+    async () =>
+      await evaluate(
+        "document.querySelector('.preview-line-active mark')?.textContent === 'Magical'"
+      ),
+    'preview updates to the new match'
+  )
+  await query('armor')
+  await until(
+    async () =>
+      await evaluate(
+        "document.querySelector('.preview-line-active mark')?.textContent === 'armor'"
+      ),
+    'original match returns'
   )
   await screenshot('content-search-preview.png')
   await key('Return')

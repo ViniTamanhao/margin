@@ -43,7 +43,7 @@ export function ContentSearch({
   const current = response?.query === query ? response : null
   const getItems = useCallback(
     () =>
-      (current?.results ?? []).map((result) => ({
+      (query.trim() ? (response?.results ?? []) : []).map((result) => ({
         ...result,
         id: `${result.path}:${result.position}`,
         title: result.path.slice(result.path.lastIndexOf('/') + 1),
@@ -61,7 +61,7 @@ export function ContentSearch({
           </>
         )
       })),
-    [current]
+    [response, query]
   )
   return (
     <Picker
@@ -76,6 +76,7 @@ export function ContentSearch({
       }
       renderPreview={(item) => (
         <FilePreview
+          pending={Boolean(query.trim()) && !current}
           path={item?.path}
           line={item?.line}
           column={item?.column}

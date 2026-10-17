@@ -64,6 +64,7 @@ export function Picker<T extends PickerItem>({
     onClose()
   }
   const select = (item: T): void => {
+    if (busy) return
     close()
     onSelect(item)
   }
@@ -125,6 +126,7 @@ export function Picker<T extends PickerItem>({
                 id={optionId(index)}
                 role="option"
                 aria-selected={index === active}
+                aria-disabled={busy || undefined}
                 className="picker-option"
                 onMouseMove={() => setActiveId(item.id)}
                 onMouseDown={(event) => event.preventDefault()}
