@@ -14,7 +14,7 @@
   flex-direction: column;
 }
 .picker::backdrop {
-  background: color-mix(in srgb, var(--margin-bg) 75%, transparent);
+  background: var(--margin-backdrop);
 }
 .picker-input {
   width: 100%;

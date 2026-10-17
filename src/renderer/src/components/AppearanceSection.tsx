@@ -1,4 +1,4 @@
-import type { AppearanceSettings } from '../../../shared/appearance'
+import { fontSizeLimits, type AppearanceSettings } from '../../../shared/appearance'
 
 export function AppearanceSection({
   draft,
@@ -29,15 +29,31 @@ export function AppearanceSection({
         </div>
       </fieldset>
       <fieldset disabled={saving} className="settings-group">
-        <legend>Font</legend>
+        <legend>Typography</legend>
         <label className="setting-row">
-          Font family
+          Editor font family
           <input
             value={draft.fontFamily}
             maxLength={200}
             onChange={(event) => onChange({ ...draft, fontFamily: event.target.value })}
           />
         </label>
+        <div className="setting-sizes">
+          {(['editorFontSize', 'uiFontSize'] as const).map((key) => (
+            <label className="setting-row" key={key}>
+              {key === 'editorFontSize' ? 'Editor size (px)' : 'Interface size (px)'}
+              <input
+                type="number"
+                name={key}
+                min={fontSizeLimits[key].min}
+                max={fontSizeLimits[key].max}
+                step={1}
+                value={Number.isNaN(draft[key]) ? '' : draft[key]}
+                onChange={(event) => onChange({ ...draft, [key]: event.target.valueAsNumber })}
+              />
+            </label>
+          ))}
+        </div>
       </fieldset>
     </>
   )

@@ -149,12 +149,12 @@ the destination from overwrite; stronger source/parent protection remains separa
 
 ## Appearance and Markdown presentation
 
-Settings contains only Light/Dark mode and an editor font-family field, both with
-live preview. Both themes use neutral gray surfaces, selections and focus accents.
-The editor defaults to system sans-serif at a fixed 18 px. Installed fonts and normal
+Settings contains Light/Dark mode, an editor font family, and separate editor
+(12–32 px) and interface (11–20 px) font sizes, all with live preview. Both themes use neutral gray surfaces, selections and focus accents.
+The editor defaults to system sans-serif at 18 px. Installed fonts and normal
 CSS font fallback lists are supported. Choose **Done** to save; Cancel/Escape restores
-the saved appearance. Old custom colors and font-size preferences are ignored and
-removed on the next save. Legacy unversioned files still migrate the exact former
+the saved appearance. Existing settings without font sizes use 18 px editor and 13 px interface defaults.
+Obsolete custom colors and the legacy `fontSize` field are removed on the next save. Legacy unversioned files still migrate the exact former
 default serif stack to system sans; versioned files preserve intentional font choices.
 
 Files expands into a real grid column beside the editor with a short transition,
@@ -166,8 +166,8 @@ and follows the theme's text color.
 Only Unsaved/Saving states use status space; Saved disappears.
 Conflict and error feedback remains in the writing pane.
 
-UI styles share a small token set in `assets/base.css`: a 13 px interface font,
-12 px navigation and helper text, 32 px controls, 28 px icon buttons, the existing
+UI styles share a small token set in `assets/base.css`: a default 13 px interface font,
+relative navigation and helper text sizes, controls and icon buttons that grow with text, the existing
 spacing scale, and 4 px control / 8 px dialog corners. File navigation uses padded
 rows with folder disclosure icons and indentation. Expansion is kept for the current
 workspace session; folder changes outside Margin update the tree. Empty messages and recovery actions have explicit spacing.

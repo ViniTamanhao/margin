@@ -278,7 +278,7 @@ input:disabled,
   flex-direction: column;
 }
 .settings-dialog::backdrop {
-  background: color-mix(in srgb, var(--margin-bg) 75%, transparent);
+  background: var(--margin-backdrop);
 }
 .settings-heading,
 .settings-footer {
@@ -328,6 +328,12 @@ input:disabled,
   gap: var(--space-xs);
   min-width: 0;
 }
+.setting-sizes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+}
 .setting-row input {
   min-height: var(--control-height);
   font: inherit;
@@ -349,7 +355,7 @@ input:disabled,
   gap: var(--space-xs);
   padding: var(--space-xs);
   border-radius: var(--radius-sm);
-  background: var(--margin-surface);
+  border: 1px solid var(--margin-border);
 }
 .theme-option {
   position: relative;

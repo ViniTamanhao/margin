@@ -150,7 +150,7 @@ async function run() {
         await evaluate(
           "getComputedStyle(document.documentElement).getPropertyValue('--editor-font-size').trim()"
         ),
-        '18px'
+        '24px'
       )
       assert.equal(
         await evaluate(
@@ -836,8 +836,8 @@ async function run() {
       )
       assert.equal(
         await evaluate("document.querySelectorAll('dialog input').length"),
-        3,
-        'settings contain only two theme radios and one font field'
+        5,
+        'settings contain theme, font family and two font sizes'
       )
       await screenshot('settings-dark.png')
       await evaluate(
@@ -897,6 +897,8 @@ async function run() {
         })()`)
       }
       await setInput('dialog input:not([type])', 'Georgia, serif')
+      await setInput('dialog input[name=editorFontSize]', '24')
+      await setInput('dialog input[name=uiFontSize]', '16')
       await click('Done')
       await until(
         async () => await evaluate("!document.querySelector('dialog')"),
@@ -906,14 +908,23 @@ async function run() {
         await evaluate(
           "getComputedStyle(document.documentElement).getPropertyValue('--editor-font-size').trim()"
         ),
-        '18px'
+        '24px'
+      )
+      assert.equal(
+        await evaluate("getComputedStyle(document.querySelector('.app-header')).fontSize"),
+        '16px'
       )
       const persisted = JSON.parse(await readFile(join(root, 'app-data/appearance.json'), 'utf8'))
       assert.equal(persisted.version, 1)
       const appearance = persisted.appearance
       assert.equal(appearance.theme, 'light')
       assert.equal(appearance.fontFamily, 'Georgia, serif')
-      assert.deepEqual(Object.keys(appearance).sort(), ['fontFamily', 'theme'])
+      assert.deepEqual(Object.keys(appearance).sort(), [
+        'editorFontSize',
+        'fontFamily',
+        'theme',
+        'uiFontSize'
+      ])
       await screenshot('light.png')
       const intentionalSerif = "'Iowan Old Style', 'Palatino Linotype', Georgia, serif"
       await click('Settings')

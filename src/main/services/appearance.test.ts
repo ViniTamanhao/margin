@@ -25,7 +25,7 @@ test('defaults to dark, serializes writes and persists independently of workspac
   try {
     expect(await service.read()).toEqual(defaultAppearance)
     const first = { ...defaultAppearance, theme: 'light' as const }
-    const last = { ...first, fontFamily: 'Georgia, serif' }
+    const last = { ...first, fontFamily: 'Georgia, serif', editorFontSize: 24, uiFontSize: 16 }
     await Promise.all([service.save(first), service.save(last)])
     expect(await new AppearanceService(file).read()).toEqual(last)
     await expect(service.save({ ...last, fontFamily: 'url(secret)' })).rejects.toThrow('Invalid')
@@ -99,7 +99,7 @@ test('drops obsolete font sizes and color overrides when loading and saving', as
   const directory = await mkdtemp(join(tmpdir(), 'margin-old-appearance-'))
   const file = join(directory, 'appearance.json')
   const service = new AppearanceService(file)
-  const expected = { theme: 'light' as const, fontFamily: 'Georgia, serif' }
+  const expected = { ...defaultAppearance, theme: 'light' as const, fontFamily: 'Georgia, serif' }
   const oldSettings = { ...expected, fontSize: 30, colors: { selection: '#00ff00' } }
   try {
     for (const stored of [oldSettings, { version: 1, appearance: oldSettings }]) {
@@ -110,5 +110,20 @@ test('drops obsolete font sizes and color overrides when loading and saving', as
     expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({ version: 1, appearance: expected })
   } finally {
     await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('font sizes default for existing settings and reject invalid values', () => {
+  expect(parseAppearance({ theme: 'light', fontFamily: 'Georgia' })).toEqual({
+    ...defaultAppearance,
+    theme: 'light',
+    fontFamily: 'Georgia'
+  })
+  for (const [key, values] of Object.entries({
+    editorFontSize: [11, 33, 18.5, NaN, Infinity, null, '18'],
+    uiFontSize: [10, 21, 13.5, NaN, Infinity, null, '13']
+  })) {
+    for (const value of values)
+      expect(parseAppearance({ ...defaultAppearance, [key]: value })).toBeNull()
   }
 })

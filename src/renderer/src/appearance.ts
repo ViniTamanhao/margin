@@ -5,4 +5,6 @@ export function applyAppearance(settings: AppearanceSettings): void {
   for (const [key, color] of Object.entries(themes[settings.theme]))
     root.style.setProperty(`--margin-${key}`, color)
   root.style.setProperty('--editor-font-family', settings.fontFamily)
+  root.style.setProperty('--editor-font-size', `${settings.editorFontSize}px`)
+  root.style.setProperty('--ui-font-size', `${settings.uiFontSize}px`)
 }
