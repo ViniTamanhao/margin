@@ -17,13 +17,49 @@
   user-select: none;
   border-bottom: 1px solid var(--margin-border);
 }
-.app-shell[data-custom-title-bar='true'] .app-header {
+/* Keep OS drag, double-click zoom, edge snapping, and the system window menu. */
+.app-header {
   min-height: max(36px, var(--control-height));
+  app-region: drag;
+}
+.app-shell[data-platform='win32'] .app-header {
   padding-inline-start: max(var(--space-md), env(titlebar-area-x, 0px));
   padding-inline-end: calc(
     100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + var(--space-sm)
   );
-  app-region: drag;
+}
+.app-shell[data-platform='win32'] .app-header[data-fullscreen='true'] {
+  padding-inline: var(--space-md) var(--space-sm);
+}
+.app-header[data-focused='false'] .document-name {
+  opacity: 0.7;
+}
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding-inline: var(--space-sm);
+  flex-shrink: 0;
+  app-region: no-drag;
+}
+.window-control {
+  display: grid;
+  place-items: center;
+  width: var(--icon-button-size);
+  height: var(--icon-button-size);
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--margin-text);
+}
+.window-control:enabled:hover,
+.window-control:enabled:active {
+  background: var(--margin-hover);
+}
+.window-control svg {
+  width: var(--space-md);
+  height: var(--space-md);
 }
 .icon-button {
   display: inline-grid;
@@ -49,7 +85,7 @@
 .app-header button {
   app-region: no-drag;
 }
-.app-shell[data-platform='darwin'][data-custom-title-bar='true'] .app-header {
+.app-shell[data-platform='darwin'] .app-header:not([data-fullscreen='true']) {
   padding-inline-start: 80px;
 }
 .empty-state {
@@ -507,19 +543,4 @@ input:disabled,
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.setting-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-}
-.setting-toggle input {
-  margin: 0;
-  accent-color: var(--margin-accent);
-}
-.setting-hint {
-  margin: var(--space-sm) 0 0;
-  font-size: var(--ui-font-size-sm);
-  color: var(--margin-text-muted);
 }

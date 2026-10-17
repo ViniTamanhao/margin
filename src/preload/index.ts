@@ -1,6 +1,5 @@
-import { customTitleBarArgument } from '../shared/appearance'
 import { contextBridge, ipcRenderer } from 'electron'
-import { channels, type MarginAPI, type WorkspaceChange } from '../shared/api'
+import { channels, type MarginAPI, type WorkspaceChange, type WindowState } from '../shared/api'
 
 const api: MarginAPI = {
   app: { info: () => ipcRenderer.invoke(channels.appInfo) },
@@ -9,7 +8,16 @@ const api: MarginAPI = {
     save: (settings) => ipcRenderer.invoke(channels.appearanceSave, settings)
   },
   window: {
-    customTitleBar: process.argv.includes(customTitleBarArgument),
+    state: () => ipcRenderer.invoke(channels.windowState),
+    action: (action) => ipcRenderer.invoke(channels.windowAction, action),
+    onStateChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, state: WindowState): void =>
+        callback(state)
+      ipcRenderer.on(channels.windowStateChanged, listener)
+      return () => {
+        ipcRenderer.removeListener(channels.windowStateChanged, listener)
+      }
+    },
     platform: process.platform,
     setTheme: (theme) => ipcRenderer.invoke(channels.windowTheme, theme),
     onClosing: (callback) => {

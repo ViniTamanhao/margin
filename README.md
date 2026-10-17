@@ -164,12 +164,13 @@ then collapses after opening a file or using Escape/Ctrl/Cmd+B. It resizes the
 writing surface and supports reduced motion. A single draggable title strip shows a quiet document basename (full relative path
 in its tooltip) and the folder action, alongside native window controls. Electron
 hides the separate OS title text; no permanent wordmark is shown. Window controls
-follow theme previews and reserve their own space in the strip. Settings → Window
-lets you disable **Use custom title bar** to restore the native OS frame after
-restarting Margin. Existing settings keep the custom bar enabled. The document
-header remains compact in native mode, without a drag region or reserved control
-space. Both modes follow the saved theme from startup; native frame appearance
-also depends on the operating system/window manager.
+follow theme previews and reserve their own space in the strip. The custom title bar is always enabled. Linux uses theme-colored, circular window
+controls (minimize, maximize/restore, close); Windows keeps its native control overlay
+and macOS keeps its traffic lights. The drag region retains OS dragging, double-click
+zoom and window-menu behavior. The maximize icon follows OS state changes. F11 or
+**Toggle Fullscreen** in the command palette enters/exits fullscreen; Linux controls
+hide and macOS traffic-light spacing collapses in fullscreen. Close always uses the
+existing save-before-close flow. Older title-bar preferences are ignored.
 Only Unsaved/Saving states use status space; Saved disappears.
 Conflict and error feedback remains in the writing pane.
 

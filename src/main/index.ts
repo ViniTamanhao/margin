@@ -3,11 +3,9 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { guardWindowClose } from './window-lifecycle'
 import { registerIPC } from './ipc'
-import { customTitleBarArgument, themes } from '../shared/appearance'
+import { themes } from '../shared/appearance'
+import { observeWindowState } from './window-controls'
 import { AppearanceService } from './services/appearance'
-
-// Track the active frame style separately from preferences saved for the next launch.
-const customTitleBarWindows = new WeakSet<BrowserWindow>()
 
 async function createWindow(): Promise<void> {
   const appearance = await new AppearanceService(
@@ -19,30 +17,28 @@ async function createWindow(): Promise<void> {
     height: 670,
     show: false,
     backgroundColor: themes[appearance.theme].bg,
-    darkTheme: appearance.theme === 'dark',
     autoHideMenuBar: true,
-    titleBarStyle: appearance.customTitleBar ? 'hidden' : 'default',
-    ...(appearance.customTitleBar
-      ? process.platform === 'darwin'
-        ? { trafficLightPosition: { x: 12, y: 10 } }
-        : {
+    titleBarStyle: 'hidden',
+    ...(process.platform === 'darwin'
+      ? { trafficLightPosition: { x: 12, y: 10 } }
+      : process.platform === 'win32'
+        ? {
             titleBarOverlay: {
-              color: '#00000000',
+              color: themes[appearance.theme].bg,
               symbolColor: themes[appearance.theme].text,
               height: 36
             }
           }
-      : {}),
+        : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      additionalArguments: appearance.customTitleBar ? [customTitleBarArgument] : [],
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
   })
 
-  if (appearance.customTitleBar) customTitleBarWindows.add(mainWindow)
+  observeWindowState(mainWindow)
   guardWindowClose(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
@@ -76,11 +72,7 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  const workspaces = registerIPC(
-    app.getVersion(),
-    join(app.getPath('userData'), 'state.json'),
-    (window) => customTitleBarWindows.has(window)
-  )
+  const workspaces = registerIPC(app.getVersion(), join(app.getPath('userData'), 'state.json'))
   app.on('will-quit', () => {
     void workspaces.close()
   })

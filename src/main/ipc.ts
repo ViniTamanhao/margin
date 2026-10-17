@@ -18,6 +18,7 @@ import {
   type WorkspaceMutation,
   type WorkspaceResult
 } from '../shared/api'
+import { readWindowState, performWindowAction } from './window-controls'
 import { themes } from '../shared/appearance'
 import { confirmWindowClose } from './window-lifecycle'
 import { WorkspaceService } from './services/workspace'
@@ -26,11 +27,7 @@ import { AppearanceService } from './services/appearance'
 import { ContentSearchService } from './services/content-search'
 import { DocumentService } from './services/documents'
 
-export function registerIPC(
-  version: string,
-  stateFile: string,
-  hasCustomTitleBar: (window: BrowserWindow) => boolean
-): WorkspaceService {
+export function registerIPC(version: string, stateFile: string): WorkspaceService {
   const workspaces = new WorkspaceService((path) => shell.trashItem(path))
   const state = new AppStateService(stateFile)
   const appearance = new AppearanceService(join(dirname(stateFile), 'appearance.json'))
@@ -67,7 +64,11 @@ export function registerIPC(
     app: { info: async () => ({ name: 'Margin', version }) },
     appearance: { read: () => appearance.read(), save: (settings) => appearance.save(settings) },
     window: {
-      customTitleBar: true,
+      state: async () => {
+        throw new Error('Window state requires an IPC sender.')
+      },
+      onStateChanged: () => () => {},
+      action: async () => {},
       platform: process.platform,
       setTheme: async () => {},
       onClosing: () => () => {},
@@ -139,14 +140,22 @@ export function registerIPC(
       throw new Error('Untrusted IPC sender.')
     }
   }
+  ipcMain.handle(channels.windowState, (event) => {
+    trusted(event)
+    return readWindowState(BrowserWindow.fromWebContents(event.sender)!)
+  })
+  ipcMain.handle(channels.windowAction, (event, action: unknown) => {
+    trusted(event)
+    performWindowAction(BrowserWindow.fromWebContents(event.sender)!, action)
+  })
   ipcMain.handle(channels.windowTheme, (event, theme: unknown) => {
     trusted(event)
     if (theme !== 'dark' && theme !== 'light') throw new Error('Invalid window theme.')
     const window = BrowserWindow.fromWebContents(event.sender)
     nativeTheme.themeSource = theme
     window?.setBackgroundColor(themes[theme].bg)
-    if (window && process.platform !== 'darwin' && hasCustomTitleBar(window))
-      window?.setTitleBarOverlay({ color: '#00000000', symbolColor: themes[theme].text })
+    if (window && process.platform === 'win32')
+      window?.setTitleBarOverlay({ color: themes[theme].bg, symbolColor: themes[theme].text })
   })
   ipcMain.handle(channels.appearanceRead, (event) => {
     trusted(event)

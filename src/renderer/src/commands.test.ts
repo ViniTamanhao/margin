@@ -125,3 +125,10 @@ test('shortcut sheet derives registered shortcuts and omits commands without sho
   expect(commandForKey(key({ key: 'f' }))).toBe('workspace.search-content')
   expect(commandForKey(key({ key: 's', shiftKey: false }))).toBe('editor.save')
 })
+
+test('fullscreen has an unmodified F11 shortcut', () => {
+  expect(commandForKey(key({ key: 'F11', ctrlKey: false, shiftKey: false }))).toBe(
+    'window.toggle-fullscreen'
+  )
+  expect(commandForKey(key({ key: 'F11', ctrlKey: true, shiftKey: false }))).toBeUndefined()
+})

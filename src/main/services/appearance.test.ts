@@ -13,10 +13,7 @@ test('validates the two themes and font family', () => {
     { fontFamily: '' },
     { fontFamily: '   ' },
     { fontFamily: 'a'.repeat(201) },
-    { fontFamily: 18 },
-    { customTitleBar: 'true' },
-    { customTitleBar: null },
-    { customTitleBar: 1 }
+    { fontFamily: 18 }
   ])
     expect(parseAppearance({ ...defaultAppearance, ...patch })).toBeNull()
   expect(parseAppearance(null)).toBeNull()
@@ -30,7 +27,6 @@ test('defaults to dark, serializes writes and persists independently of workspac
     const first = { ...defaultAppearance, theme: 'light' as const }
     const last = {
       ...first,
-      customTitleBar: false,
       fontFamily: 'Georgia, serif',
       editorFontSize: 24,
       uiFontSize: 16
@@ -135,4 +131,9 @@ test('font sizes default for existing settings and reject invalid values', () =>
     for (const value of values)
       expect(parseAppearance({ ...defaultAppearance, [key]: value })).toBeNull()
   }
+})
+
+test('ignores the removed title bar preference in older settings', () => {
+  for (const customTitleBar of [true, false])
+    expect(parseAppearance({ ...defaultAppearance, customTitleBar })).toEqual(defaultAppearance)
 })

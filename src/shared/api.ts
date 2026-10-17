@@ -16,10 +16,23 @@ export const channels = {
   documentSave: 'document:save',
   documentSaveCopy: 'document:save-copy',
   workspaceChanged: 'workspace:changed',
+  windowState: 'window:state',
+  windowStateChanged: 'window:state-changed',
+  windowAction: 'window:action',
   windowTheme: 'window:theme',
   windowClosing: 'window:closing',
   windowConfirmClose: 'window:confirm-close'
 } as const
+
+export type WindowAction = 'minimize' | 'toggle-maximize' | 'toggle-fullscreen' | 'close'
+export interface WindowState {
+  focused: boolean
+  maximized: boolean
+  fullscreen: boolean
+  minimizable: boolean
+  maximizable: boolean
+  fullscreenable: boolean
+}
 
 export interface AppInfo {
   name: string
@@ -101,7 +114,9 @@ export interface MarginAPI {
     save(settings: AppearanceSettings): Promise<void>
   }
   window: {
-    customTitleBar: boolean
+    state(): Promise<WindowState>
+    onStateChanged(callback: (state: WindowState) => void): () => void
+    action(action: WindowAction): Promise<void>
     platform: string
     setTheme(theme: ThemeName): Promise<void>
     onClosing(callback: () => void): () => void

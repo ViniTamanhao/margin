@@ -7,8 +7,15 @@ interface CommandDefinition {
   key?: string
   shift?: boolean
   alt?: boolean
+  unmodified?: boolean
 }
 export const commandDefinitions = {
+  'window.toggle-fullscreen': {
+    title: 'Toggle Fullscreen',
+    shortcut: 'F11',
+    key: 'f11',
+    unmodified: true
+  },
   'help.keyboard-shortcuts': { title: 'Keyboard Shortcuts' },
   'editor.save': { title: 'Save', shortcut: 'Ctrl/Cmd+S', key: 's', shift: false },
   'workspace.new-file': { title: 'New File' },
@@ -81,9 +88,11 @@ export function commandForKey(event: KeyboardEvent): CommandId | undefined {
   if (event.isComposing) return undefined
   return (Object.keys(commandDefinitions) as CommandId[]).find((id) => {
     const command: CommandDefinition = commandDefinitions[id]
-    const modifiers = command.alt
-      ? event.altKey && !event.metaKey && !event.ctrlKey
-      : (event.metaKey || event.ctrlKey) && !event.altKey
+    const modifiers = command.unmodified
+      ? !event.ctrlKey && !event.metaKey && !event.altKey
+      : command.alt
+        ? event.altKey && !event.metaKey && !event.ctrlKey
+        : (event.metaKey || event.ctrlKey) && !event.altKey
     return (
       modifiers &&
       command.key === event.key.toLowerCase() &&
@@ -125,7 +134,8 @@ export function shortcutGroups(): {
     },
     { title: 'Workspace', ids: ['workspace.open', 'workspace.toggle-files', 'settings.open'] },
     { title: 'Files panel', ids: ['workspace.rename', 'workspace.trash'] },
-    { title: 'Editor', ids: ['editor.save'] }
+    { title: 'Editor', ids: ['editor.save'] },
+    { title: 'Window', ids: ['window.toggle-fullscreen'] }
   ]
   return groups.map(({ title, ids }) => ({
     title,

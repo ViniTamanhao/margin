@@ -5,6 +5,7 @@ import { EditorSurface } from './editor/EditorSurface'
 import type { AppearanceSettings } from '../../shared/appearance'
 import { applyAppearance } from './appearance'
 import { KeyboardShortcuts } from './components/KeyboardShortcuts'
+import { TitleBar } from './components/TitleBar'
 import { SettingsDialog } from './components/SettingsDialog'
 import {
   createCommandRegistry,
@@ -185,6 +186,12 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           execute: toggleFiles
         },
         {
+          id: 'window.toggle-fullscreen',
+          ...commandDefinitions['window.toggle-fullscreen'],
+          isEnabled: () => true,
+          execute: () => window.margin.window.action('toggle-fullscreen')
+        },
+        {
           id: 'settings.open',
           ...commandDefinitions['settings.open'],
           isEnabled: () => !busy && !editor.locked,
@@ -258,12 +265,8 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
     }
   }, [controller, executeCommand, filesExpanded, shortcutsOpen, settingsOpen, picker])
   return (
-    <main
-      className="app-shell"
-      data-platform={window.margin.window.platform}
-      data-custom-title-bar={window.margin.window.customTitleBar}
-    >
-      <header className="app-header">
+    <main className="app-shell" data-platform={window.margin.window.platform}>
+      <TitleBar onError={setError}>
         <span className="document-name" title={editor.path ?? undefined}>
           {editor.path ? editor.path.slice(editor.path.lastIndexOf('/') + 1) : ''}
         </span>
@@ -283,7 +286,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
         >
           <Icon name="folder" />
         </button>
-      </header>
+      </TitleBar>
       {error && (
         <p className="notice" role="alert">
           {error}
