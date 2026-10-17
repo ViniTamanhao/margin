@@ -871,6 +871,27 @@ async function run() {
         'immediate theme preview'
       )
       await screenshot('settings.png')
+      await evaluate("document.querySelector('dialog input[role=combobox]').focus()")
+      await setInput('dialog input[role=combobox]', 'no such font')
+      assert.equal(await evaluate("document.querySelectorAll('.font-option').length"), 0)
+      assert.equal(
+        await evaluate("document.querySelector('.font-picker [role=status]').textContent"),
+        'No matching fonts'
+      )
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
+      await until(
+        async () =>
+          await evaluate(
+            "document.querySelector('[role=combobox]').getAttribute('aria-expanded') === 'false'"
+          ),
+        'Escape closes font dropdown'
+      )
+      assert.equal(
+        await evaluate("document.querySelector('dialog').open"),
+        true,
+        'first Escape keeps Settings open'
+      )
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
       window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
       await until(
@@ -896,7 +917,39 @@ async function run() {
           input.dispatchEvent(new Event('input', { bubbles: true }));
         })()`)
       }
-      await setInput('dialog input:not([type])', 'Georgia, serif')
+      async function selectFont(query) {
+        await evaluate("document.querySelector('dialog input[role=combobox]').focus()")
+        await setInput('dialog input[role=combobox]', query)
+        assert.equal(
+          await evaluate("document.querySelectorAll('.font-option').length"),
+          1,
+          'font search filters options'
+        )
+        window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' })
+        window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' })
+        await until(
+          async () =>
+            await evaluate(
+              "document.querySelector('[role=combobox]').getAttribute('aria-expanded') === 'false'"
+            ),
+          'Enter selects font'
+        )
+      }
+      await selectFont('Georgia')
+      await evaluate("document.querySelector('dialog input[role=combobox]').click()")
+      assert.equal(
+        await evaluate("document.querySelector('[role=combobox]').getAttribute('aria-expanded')"),
+        'true',
+        'selected dropdown reopens by click'
+      )
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Down' })
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Down' })
+      assert.equal(
+        await evaluate(
+          "document.querySelector('[role=combobox]').hasAttribute('aria-activedescendant')"
+        ),
+        true
+      )
       await setInput('dialog input[name=editorFontSize]', '24')
       await setInput('dialog input[name=uiFontSize]', '16')
       await click('Done')
@@ -928,7 +981,7 @@ async function run() {
       await screenshot('light.png')
       const intentionalSerif = "'Iowan Old Style', 'Palatino Linotype', Georgia, serif"
       await click('Settings')
-      await setInput('dialog input:not([type])', intentionalSerif)
+      await selectFont('Palatino')
       await click('Done')
       await until(
         async () => await evaluate("!document.querySelector('dialog')"),

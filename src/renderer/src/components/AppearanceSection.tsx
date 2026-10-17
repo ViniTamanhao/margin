@@ -1,4 +1,5 @@
 import { fontSizeLimits, type AppearanceSettings } from '../../../shared/appearance'
+import { FontPicker } from './FontPicker'
 
 export function AppearanceSection({
   draft,
@@ -30,14 +31,10 @@ export function AppearanceSection({
       </fieldset>
       <fieldset disabled={saving} className="settings-group">
         <legend>Typography</legend>
-        <label className="setting-row">
-          Editor font family
-          <input
-            value={draft.fontFamily}
-            maxLength={200}
-            onChange={(event) => onChange({ ...draft, fontFamily: event.target.value })}
-          />
-        </label>
+        <FontPicker
+          value={draft.fontFamily}
+          onChange={(fontFamily) => onChange({ ...draft, fontFamily })}
+        />
         <div className="setting-sizes">
           {(['editorFontSize', 'uiFontSize'] as const).map((key) => (
             <label className="setting-row" key={key}>

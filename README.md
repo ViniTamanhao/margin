@@ -151,8 +151,10 @@ the destination from overwrite; stronger source/parent protection remains separa
 
 Settings contains Light/Dark mode, an editor font family, and separate editor
 (12–32 px) and interface (11–20 px) font sizes, all with live preview. Both themes use neutral gray surfaces, selections and focus accents.
-The editor defaults to system sans-serif at 18 px. Installed fonts and normal
-CSS font fallback lists are supported. Choose **Done** to save; Cancel/Escape restores
+The editor defaults to system sans-serif at 18 px. The searchable font dropdown offers system, serif, monospace, and familiar font
+stacks, with a small preview. Fonts use local fallbacks when unavailable; no fonts
+are downloaded. Type to filter, use arrows and Enter to select, or Escape to dismiss
+the list before dismissing Settings. Existing custom font stacks remain selectable. Choose **Done** to save; Cancel/Escape restores
 the saved appearance. Existing settings without font sizes use 18 px editor and 13 px interface defaults.
 Obsolete custom colors and the legacy `fontSize` field are removed on the next save. Legacy unversioned files still migrate the exact former
 default serif stack to system sans; versioned files preserve intentional font choices.
