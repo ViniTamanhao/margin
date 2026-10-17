@@ -165,7 +165,9 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           id: 'workspace.search-content',
           ...commandDefinitions['workspace.search-content'],
           isEnabled: () => Boolean(workspace) && !busy && !editor.locked,
-          execute: () => setPicker('content')
+          execute: async () => {
+            if (await controller.flush()) setPicker('content')
+          }
         },
         {
           id: 'workspace.quick-open',

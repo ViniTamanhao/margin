@@ -218,6 +218,30 @@ export async function runSearchPolish({
     'cursor is at the exact UTF-16 match position'
   )
   assert.equal(await evaluate("document.activeElement?.classList.contains('cm-content')"), true)
+  // Dispatch the edit and command together, before the autosave timer can run.
+  const inserted = 'New text above the match.\n'
+  await evaluate(`window.marginInsertAboveAndSearch(${JSON.stringify(inserted)})`)
+  await until(
+    async () =>
+      await evaluate(`document.querySelector('.picker[aria-label="Search Workspace"]')?.open`),
+    'search opens after flushing unsaved edits'
+  )
+  assert.equal(
+    await readFile(join(workspace, 'Dragonfire Mechanics.md'), 'utf8'),
+    inserted + dragon
+  )
+  await query('armor')
+  await until(
+    async () => (await selected()).includes('Dragonfire Mechanics.md:39'),
+    'search uses the shifted match line'
+  )
+  await key('Return')
+  await until(
+    async () => (await cursor()).position === inserted.length + dragon.indexOf('armor'),
+    'search result lands at the actual match after an unsaved edit'
+  )
+  assert.ok((await cursor()).text.includes('armor'))
+  await key('Left', ['alt'])
   await key('Left', ['alt'])
   await until(async () => (await title()) === 'a.md', 'Back returns to prior document')
   assert.deepEqual(await cursor(), previousCursor, 'Back restores original position')
