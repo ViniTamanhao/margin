@@ -17,6 +17,12 @@ export const commandDefinitions = {
     unmodified: true
   },
   'help.keyboard-shortcuts': { title: 'Keyboard Shortcuts' },
+  'editor.toggle-mode': {
+    title: 'Toggle Read / Write Mode',
+    shortcut: 'Ctrl/Cmd+Shift+M',
+    key: 'm',
+    shift: true
+  },
   'editor.save': { title: 'Save', shortcut: 'Ctrl/Cmd+S', key: 's', shift: false },
   'workspace.new-file': { title: 'New File' },
   'workspace.new-folder': { title: 'New Folder' },
@@ -134,7 +140,7 @@ export function shortcutGroups(): {
     },
     { title: 'Workspace', ids: ['workspace.open', 'workspace.toggle-files', 'settings.open'] },
     { title: 'Files panel', ids: ['workspace.rename', 'workspace.trash'] },
-    { title: 'Editor', ids: ['editor.save'] },
+    { title: 'Editor', ids: ['editor.save', 'editor.toggle-mode'] },
     { title: 'Window', ids: ['window.toggle-fullscreen'] }
   ]
   return groups.map(({ title, ids }) => ({

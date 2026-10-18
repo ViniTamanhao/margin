@@ -3,9 +3,11 @@ import type { EditorController } from './controller'
 
 export function EditorSurface({
   controller,
-  activePath
+  activePath,
+  mode
 }: {
   controller: EditorController
+  mode: 'read' | 'write'
   activePath: string | null
 }): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null)
@@ -15,6 +17,6 @@ export function EditorSurface({
   }, [controller])
   useLayoutEffect(() => {
     if (activePath) controller.focus()
-  }, [activePath, controller])
+  }, [activePath, controller, mode])
   return <div ref={container} className="editor-surface" />
 }

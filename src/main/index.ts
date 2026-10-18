@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeTheme } from 'electron'
+import { app, BrowserWindow, nativeTheme, shell } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { guardWindowClose } from './window-lifecycle'
@@ -45,7 +45,14 @@ async function createWindow(): Promise<void> {
     mainWindow.show()
   })
 
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^(https?:\/\/|mailto:)/i.test(url)) {
+      void shell.openExternal(url).catch((error: unknown) => {
+        console.error('Could not open external link.', error)
+      })
+    }
+    return { action: 'deny' }
+  })
 
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault())
 

@@ -13,7 +13,8 @@ import { isWithinPath, remapPath } from '../../../shared/workspace-paths'
 import type { WorkspaceChange, WorkspaceMutation, WorkspaceResult } from '../../../shared/api'
 import type { MarginAPI, DocumentSnapshot } from '../../../shared/api'
 
-type DocumentStatus = 'saved' | 'dirty' | 'saving' | 'conflict' | 'missing' | 'error'
+export type DocumentMode = 'write' | 'read'
+export type DocumentStatus = 'saved' | 'dirty' | 'saving' | 'conflict' | 'missing' | 'error'
 interface EditorSession {
   state: EditorState
   savedDoc: Text
@@ -25,6 +26,8 @@ interface EditorSession {
 }
 export interface EditorPresentation {
   path: string | null
+  mode: DocumentMode
+  readingState: EditorState | null
   locked: boolean
   status: DocumentStatus | 'idle'
   error: string
@@ -36,6 +39,7 @@ export interface EditorPresentation {
 
 // CodeMirror owns documents, selections and history; React only subscribes to presentation.
 export class EditorController {
+  private readingSurface: HTMLElement | null = null
   private headingVersion = 0
   private headingSource: { path: string; doc: Text; version: number } | null = null
   private changingWorkspace = false
@@ -49,6 +53,8 @@ export class EditorController {
   private listeners = new Set<() => void>()
   private presentation: EditorPresentation = {
     path: null,
+    mode: 'write',
+    readingState: null,
     status: 'idle',
     error: '',
     openError: '',
@@ -70,7 +76,11 @@ export class EditorController {
 
   private present(patch: Partial<EditorPresentation>): void {
     const next = { ...this.presentation, ...patch }
+    next.readingState =
+      next.mode === 'read' && next.path ? (this.sessions.get(next.path)?.state ?? null) : null
     if (
+      next.mode === this.presentation.mode &&
+      next.readingState?.doc === this.presentation.readingState?.doc &&
       next.locked === this.presentation.locked &&
       next.path === this.presentation.path &&
       next.status === this.presentation.status &&
@@ -131,8 +141,19 @@ export class EditorController {
     }
   }
 
+  setMode(mode: DocumentMode): void {
+    if (!this.presentation.path || this.locked) return
+    this.present({ mode })
+  }
+
+  attachReadingSurface = (element: HTMLElement | null): void => {
+    this.readingSurface = element
+    if (element) element.focus()
+  }
+
   focus(): void {
-    this.view?.focus()
+    if (this.presentation.mode === 'read') this.readingSurface?.focus()
+    else this.view?.focus()
   }
 
   location(): NavigationLocation | null {
@@ -349,7 +370,7 @@ export class EditorController {
           effects: EditorView.scrollIntoView(destination.position, { y: 'center' })
         })
       }
-      this.view?.focus()
+      this.focus()
       this.presentNavigation()
       if (previous && previous.path !== path) void this.save(previous.path)
       void this.refresh([path])
@@ -550,7 +571,7 @@ export class EditorController {
       this.show(path, session)
     } finally {
       this.setLocked(false)
-      this.view?.focus()
+      this.focus()
     }
   }
 

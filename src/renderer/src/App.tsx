@@ -1,6 +1,8 @@
 import type { WorkspaceEntry } from '../../shared/api'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { EditorController } from './editor/controller'
+import { ReadingView } from './editor/ReadingView'
+import { SaveIndicator } from './components/SaveIndicator'
 import { EditorSurface } from './editor/EditorSurface'
 import type { AppearanceSettings } from '../../shared/appearance'
 import { applyAppearance } from './appearance'
@@ -86,6 +88,12 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
           ...commandDefinitions['help.keyboard-shortcuts'],
           isEnabled: () => !busy && !editor.locked,
           execute: () => setShortcutsOpen(true)
+        },
+        {
+          id: 'editor.toggle-mode',
+          ...commandDefinitions['editor.toggle-mode'],
+          isEnabled: () => Boolean(editor.path) && !busy && !editor.locked,
+          execute: () => controller.setMode(editor.mode === 'write' ? 'read' : 'write')
         },
         {
           id: 'editor.save',
@@ -212,6 +220,7 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
       editor.locked,
       editor.path,
       editor.status,
+      editor.mode,
       editor.canGoBack,
       editor.canGoForward,
       controller,
@@ -272,9 +281,17 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
         <span className="document-name" title={editor.path ?? undefined}>
           {editor.path ? editor.path.slice(editor.path.lastIndexOf('/') + 1) : ''}
         </span>
-        <span className="document-status" role="status">
-          {editor.status === 'dirty' ? 'Unsaved' : editor.status === 'saving' ? 'Saving…' : ''}
-        </span>
+        <SaveIndicator status={editor.status} />
+        <button
+          className="icon-button mode-toggle"
+          aria-label={editor.mode === 'write' ? 'Switch to Read mode' : 'Switch to Write mode'}
+          aria-pressed={editor.mode === 'read'}
+          title={`${editor.mode === 'write' ? 'Write mode' : 'Read mode'} — ${commandTooltip('editor.toggle-mode')}`}
+          disabled={!commands.get('editor.toggle-mode')?.isEnabled()}
+          onClick={() => executeCommand('editor.toggle-mode')}
+        >
+          <Icon name={editor.mode === 'write' ? 'pen' : 'eye'} />
+        </button>
         <button
           className="icon-button"
           aria-label="Open Folder"
@@ -409,9 +426,16 @@ function App({ initialAppearance }: { initialAppearance: AppearanceSettings }): 
               {editor.error}
             </p>
           )}
-          <div className={editor.path ? 'editor-host' : 'editor-host hidden'}>
-            <EditorSurface controller={controller} activePath={editor.path} />
+          <div
+            className={
+              editor.path && editor.mode === 'write' ? 'editor-host' : 'editor-host hidden'
+            }
+          >
+            <EditorSurface controller={controller} activePath={editor.path} mode={editor.mode} />
           </div>
+          {editor.path && editor.mode === 'read' && editor.readingState && (
+            <ReadingView state={editor.readingState} controller={controller} />
+          )}
           {!editor.path && (
             <div className="empty-state">
               <p>
