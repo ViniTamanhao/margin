@@ -37,16 +37,14 @@ links are excluded. The last workspace is restored on startup if it is accessibl
 - **F2 (tree focus):** rename the selected item inline.
 - **Delete (tree focus):** Move to Trash, with confirmation.
 - **Shift+F10 / context-menu key (tree focus):** open the item's action menu.
-- **Ctrl/Cmd+Shift+M:** toggle Read / Write mode (also available in the title strip and Command Palette).
+- **Ctrl/Cmd+Shift+M:** toggle Read / Write mode (also available in the page’s top-right corner and Command Palette).
 - **Ctrl/Cmd+S:** flush pending saves.
 - Standard CodeMirror selection, undo and redo shortcuts work in the editor.
 
-Read mode renders the current in-memory Markdown, including unsaved edits. The
-CodeMirror session stays mounted, preserving selection and undo history when returning
-to Write mode. Mode switches do not save, read from disk, or change navigation history
-or recents. V0 renders basic Markdown; raw HTML, images and unsupported constructs
-remain inert source text. HTTP, HTTPS and mail links open outside Margin; relative
-links remain source text.
+Read mode uses the same CodeMirror surface and Markdown presentation as Write mode,
+with editing disabled. Typography, spacing, line wrapping and scroll position stay
+unchanged. The live session preserves unsaved edits, selection and undo history.
+Mode switches do not save, read from disk, or change navigation history or recents.
 
 The title strip shows a dot for unsaved edits, a spinner while saving, and a warning
 for save failures, conflicts or unavailable files. Saved documents have no indicator.

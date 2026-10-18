@@ -27,7 +27,6 @@ interface EditorSession {
 export interface EditorPresentation {
   path: string | null
   mode: DocumentMode
-  readingState: EditorState | null
   locked: boolean
   status: DocumentStatus | 'idle'
   error: string
@@ -39,7 +38,6 @@ export interface EditorPresentation {
 
 // CodeMirror owns documents, selections and history; React only subscribes to presentation.
 export class EditorController {
-  private readingSurface: HTMLElement | null = null
   private headingVersion = 0
   private headingSource: { path: string; doc: Text; version: number } | null = null
   private changingWorkspace = false
@@ -54,7 +52,6 @@ export class EditorController {
   private presentation: EditorPresentation = {
     path: null,
     mode: 'write',
-    readingState: null,
     status: 'idle',
     error: '',
     openError: '',
@@ -76,11 +73,8 @@ export class EditorController {
 
   private present(patch: Partial<EditorPresentation>): void {
     const next = { ...this.presentation, ...patch }
-    next.readingState =
-      next.mode === 'read' && next.path ? (this.sessions.get(next.path)?.state ?? null) : null
     if (
       next.mode === this.presentation.mode &&
-      next.readingState?.doc === this.presentation.readingState?.doc &&
       next.locked === this.presentation.locked &&
       next.path === this.presentation.path &&
       next.status === this.presentation.status &&
@@ -103,8 +97,8 @@ export class EditorController {
       doc: content,
       extensions: [
         this.editability.of([
-          EditorState.readOnly.of(this.locked),
-          EditorView.editable.of(!this.locked)
+          EditorState.readOnly.of(this.locked || this.presentation.mode === 'read'),
+          EditorView.editable.of(!this.locked && this.presentation.mode === 'write')
         ]),
         markdown(),
         contextualMarkdown,
@@ -113,7 +107,11 @@ export class EditorController {
         EditorView.lineWrapping,
         ...(content.includes('\r\n') ? [EditorState.lineSeparator.of('\r\n')] : []),
         keymap.of([...defaultKeymap, ...historyKeymap]),
-        EditorView.contentAttributes.of({ 'aria-label': 'Markdown editor', spellcheck: 'true' }),
+        EditorView.contentAttributes.of({
+          'aria-label': 'Markdown editor',
+          spellcheck: 'true',
+          tabindex: '0'
+        }),
         EditorView.updateListener.of((update) => {
           const path = this.presentation.path
           const session = path ? this.sessions.get(path) : undefined
@@ -143,17 +141,13 @@ export class EditorController {
 
   setMode(mode: DocumentMode): void {
     if (!this.presentation.path || this.locked) return
+    if (mode === this.presentation.mode) return
     this.present({ mode })
-  }
-
-  attachReadingSurface = (element: HTMLElement | null): void => {
-    this.readingSurface = element
-    if (element) element.focus()
+    this.configureEditing()
   }
 
   focus(): void {
-    if (this.presentation.mode === 'read') this.readingSurface?.focus()
-    else this.view?.focus()
+    this.view?.focus()
   }
 
   location(): NavigationLocation | null {
@@ -467,16 +461,20 @@ export class EditorController {
   setLocked(locked: boolean): void {
     this.locked = locked
     this.present({ locked })
-    for (const session of this.sessions.values()) {
-      session.state = session.state.update({
-        effects: this.editability.reconfigure([
-          EditorState.readOnly.of(locked),
-          EditorView.editable.of(!locked)
-        ])
-      }).state
+    this.configureEditing()
+  }
+
+  private configureEditing(): void {
+    const readOnly = this.locked || this.presentation.mode === 'read'
+    for (const [path, session] of this.sessions) {
+      const effects = this.editability.reconfigure([
+        EditorState.readOnly.of(readOnly),
+        EditorView.editable.of(!readOnly)
+      ])
+      // Reconfigure the mounted view in place to retain its viewport and selection.
+      if (path === this.presentation.path && this.view) this.view.dispatch({ effects })
+      else session.state = session.state.update({ effects }).state
     }
-    const active = this.presentation.path ? this.sessions.get(this.presentation.path) : undefined
-    if (active) this.view?.setState(active.state)
   }
 
   async refresh(paths: readonly string[] = [...this.sessions.keys()]): Promise<void> {

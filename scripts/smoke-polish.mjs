@@ -160,19 +160,44 @@ export async function runSearchPolish({
   probe.saveDelay = 450
   await evaluate("window.marginEditAndRead('# Unsaved projection\\n\\n')")
   await until(
-    async () => await evaluate("!!document.querySelector('.reading-view h1')"),
+    async () => await evaluate("document.querySelector('.writing-pane')?.dataset.mode === 'read'"),
     'Read mode renders live Markdown'
   )
   assert.equal(await status(), 'Unsaved changes')
   assert.equal(probe.saves, savesBeforeMode, 'switching mode does not flush')
   assert.equal(probe.reads.length, readsBeforeMode, 'switching mode does not reload')
   assert.equal(
-    await evaluate("document.querySelector('.reading-view h1').textContent.trim()"),
-    'Unsaved projection'
+    await evaluate("document.querySelector('.cm-md-h1').textContent.trim()"),
+    '# Unsaved projection'
   )
-  assert.equal(await evaluate("document.activeElement?.classList.contains('reading-view')"), true)
+  assert.equal(await evaluate("document.activeElement?.classList.contains('cm-content')"), true)
   const liveSession = await session()
+  const presentation = () =>
+    evaluate(`(() => {
+    const content = document.querySelector('.cm-content')
+    const rect = content.getBoundingClientRect()
+    const style = getComputedStyle(content)
+    return { left: rect.left, top: rect.top, width: rect.width,
+      font: style.font, padding: style.padding, html: content.innerHTML,
+      scroll: document.querySelector('.cm-scroller').scrollTop }
+  })()`)
+  assert.equal(await evaluate("document.querySelector('.cm-content').isContentEditable"), false)
+  const readPresentation = await presentation()
+  await window.webContents.insertText('Blocked in Read mode')
+  assert.deepEqual(await session(), liveSession, 'Read mode prevents typing')
+  assert.equal(
+    await evaluate("document.querySelector('.mode-toggle').closest('.writing-pane') !== null"),
+    true,
+    'toggle lives inside the page'
+  )
+  assert.equal(await evaluate("document.querySelector('.app-header .mode-toggle')"), null)
   await toggleMode()
+  assert.deepEqual(
+    await presentation(),
+    readPresentation,
+    'Read and Write share identical Markdown layout and styling'
+  )
+  assert.equal(await evaluate("document.querySelector('.cm-content').isContentEditable"), true)
   assert.deepEqual(await session(), liveSession, 'Write restores document and selection')
   assert.equal(await evaluate("document.activeElement?.classList.contains('cm-content')"), true)
   await until(async () => (await status()) === 'Saving…', 'autosave shows subtle spinner')
@@ -195,7 +220,7 @@ export async function runSearchPolish({
   await evaluate("document.querySelector('.mode-toggle').focus()")
   await key('Space')
   assert.equal(
-    await evaluate("document.activeElement?.classList.contains('reading-view')"),
+    await evaluate("document.activeElement?.classList.contains('cm-content')"),
     true,
     'Space activates focused mode toggle'
   )
