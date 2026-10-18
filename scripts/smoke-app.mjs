@@ -728,7 +728,7 @@ async function run() {
       await until(async () => (await text()).includes('Autosaved'), 'typing enters editor')
       assert.ok(
         await evaluate(
-          "['Unsaved', 'Saving…'].includes(document.querySelector('.document-status').textContent)"
+          "['dirty', 'saving'].includes(document.querySelector('.document-status').dataset.status)"
         ),
         'pending edits show transient status'
       )
@@ -766,7 +766,8 @@ async function run() {
         'selection restored'
       )
       await until(
-        async () => await evaluate("document.querySelector('.document-status').textContent === ''"),
+        async () =>
+          await evaluate("document.querySelector('.document-status').dataset.status === 'saved'"),
         'save status disappears'
       )
       await writeFile(join(root, 'workspace/a.md'), 'Clean external change')
@@ -778,6 +779,11 @@ async function run() {
         'dirty conflict detected'
       )
       assert.equal(await readFile(join(root, 'workspace/a.md'), 'utf8'), 'External conflict')
+      assert.equal(
+        await evaluate("document.querySelector('.document-status').getAttribute('aria-label')"),
+        'Save conflict'
+      )
+      assert.equal(await evaluate("!!document.querySelector('.document-status svg')"), true)
       await screenshot('conflict.png')
       window.close()
       await sleep(400)
@@ -797,7 +803,8 @@ async function run() {
         'explicit local version saved'
       )
       await until(
-        async () => await evaluate("document.querySelector('.document-status').textContent === ''"),
+        async () =>
+          await evaluate("document.querySelector('.document-status').dataset.status === 'saved'"),
         'save status disappears'
       )
       await window.webContents.insertText(' recovered')

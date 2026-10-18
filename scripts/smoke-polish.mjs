@@ -5,10 +5,24 @@ import assert from 'node:assert/strict'
 // Wrap the real IPC handlers only in the smoke process, so race tests exercise
 // production preload/components/services with deterministic delayed responses.
 export function instrumentSearchIPC(ipcMain) {
-  const probe = { reads: [], delays: {}, fail: null, searches: [], searchDelays: {} }
+  const probe = {
+    reads: [],
+    delays: {},
+    fail: null,
+    searches: [],
+    searchDelays: {},
+    saveDelay: 0,
+    saveFailure: false,
+    saves: 0
+  }
   const handle = ipcMain.handle.bind(ipcMain)
   ipcMain.handle = (channel, handler) =>
     handle(channel, async (event, ...args) => {
+      if (channel === 'document:save') {
+        probe.saves++
+        if (probe.saveDelay) await new Promise((resolve) => setTimeout(resolve, probe.saveDelay))
+        if (probe.saveFailure) throw new Error('Smoke: save unavailable')
+      }
       if (channel === 'document:read') {
         const path = args[0]
         probe.reads.push(path)
@@ -131,6 +145,62 @@ export async function runSearchPolish({
   colors = await selectionColor()
   assert.equal(colors.actual, colors.expected, 'unfocused selection uses the theme color')
   await evaluate("document.querySelector('.cm-content').focus()")
+  await key('Home', ['control'])
+  await key('Right')
+
+  // Mode switches must project the live session without opening or saving it.
+  const session = () => evaluate('window.marginSessionSnapshot()')
+  const status = () =>
+    evaluate("document.querySelector('.document-status')?.getAttribute('aria-label')")
+  const toggleMode = async () => {
+    await key('m', ['control', 'shift'])
+  }
+  const readsBeforeMode = probe.reads.length
+  const savesBeforeMode = probe.saves
+  probe.saveDelay = 450
+  await evaluate("window.marginEditAndRead('# Unsaved projection\\n\\n')")
+  await until(
+    async () => await evaluate("!!document.querySelector('.reading-view h1')"),
+    'Read mode renders live Markdown'
+  )
+  assert.equal(await status(), 'Unsaved changes')
+  assert.equal(probe.saves, savesBeforeMode, 'switching mode does not flush')
+  assert.equal(probe.reads.length, readsBeforeMode, 'switching mode does not reload')
+  assert.equal(
+    await evaluate("document.querySelector('.reading-view h1').textContent.trim()"),
+    'Unsaved projection'
+  )
+  assert.equal(await evaluate("document.activeElement?.classList.contains('reading-view')"), true)
+  const liveSession = await session()
+  await toggleMode()
+  assert.deepEqual(await session(), liveSession, 'Write restores document and selection')
+  assert.equal(await evaluate("document.activeElement?.classList.contains('cm-content')"), true)
+  await until(async () => (await status()) === 'Saving…', 'autosave shows subtle spinner')
+  await until(async () => (await status()) === null, 'saved hides indicator')
+  assert.equal(await readFile(join(workspace, 'a.md'), 'utf8'), liveSession.doc)
+  probe.saveDelay = 0
+  await key('z', ['control'])
+  await until(async () => (await session()).doc === source, 'undo history survives mode switching')
+  await key('s', ['control'])
+  await until(async () => (await status()) === null, 'undo is saved')
+  probe.saveFailure = true
+  await evaluate("window.marginEditAndRead('# Save failure\\n\\n')")
+  await until(async () => (await status()) === 'Could not save', 'save errors show warning')
+  assert.equal(await evaluate("!!document.querySelector('.document-status svg')"), true)
+  probe.saveFailure = false
+  await toggleMode()
+  await key('z', ['control'])
+  await key('s', ['control'])
+  await until(async () => (await status()) === null, 'save recovers after error')
+  await evaluate("document.querySelector('.mode-toggle').focus()")
+  await key('Space')
+  assert.equal(
+    await evaluate("document.activeElement?.classList.contains('reading-view')"),
+    true,
+    'Space activates focused mode toggle'
+  )
+  await screenshot('read-mode.png')
+  await toggleMode()
   await key('Home', ['control'])
   await key('Right')
 

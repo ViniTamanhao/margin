@@ -490,3 +490,58 @@ test('content result navigation records and restores the previous cursor, includ
   await controller.navigate('back')
   expect(views[0].state.selection.main.head).toBe(4)
 })
+
+test('Read / Write projects unsaved content without changing session, history, recents or save timing', async () => {
+  const view = views[0]
+  view.dispatch({ changes: { from: 0, insert: '# Unsaved\n' }, selection: { anchor: 2, head: 7 } })
+  const state = view.state
+  const before = controller.snapshot()
+  const location = controller.location()
+  const reads = api.read.mock.calls.length
+  controller.setMode('read')
+  expect(controller.snapshot().readingState).toBe(state)
+  expect(controller.snapshot().readingState?.doc.toString()).toContain('# Unsaved')
+  expect(controller.snapshot().recents).toBe(before.recents)
+  expect(controller.snapshot().canGoBack).toBe(before.canGoBack)
+  expect(controller.snapshot().canGoForward).toBe(before.canGoForward)
+  controller.setMode('write')
+  expect(view.state).toBe(state)
+  expect(controller.location()).toEqual(location)
+  expect(undoDepth(view.state)).toBe(1)
+  expect(api.read).toHaveBeenCalledTimes(reads)
+  expect(api.save).not.toHaveBeenCalled()
+  controller.setMode('read')
+  await vi.advanceTimersByTimeAsync(1000)
+  expect(api.save).toHaveBeenCalledOnce()
+  expect(controller.snapshot().status).toBe('saved')
+  controller.setMode('write')
+  expect(undo({ state: view.state, dispatch: view.dispatch })).toBe(true)
+  expect(view.state.doc.toString()).toBe(original.content)
+})
+
+test('Read mode follows clean external reloads and flush still saves the live session', async () => {
+  controller.setMode('read')
+  api.read.mockResolvedValue({ ...original, content: '# External', revision: 'external' })
+  await controller.refresh()
+  expect(controller.snapshot().readingState?.doc.toString()).toBe('# External')
+  controller.setMode('write')
+  views[0].dispatch({ changes: { from: 0, insert: 'local ' } })
+  controller.setMode('read')
+  expect(await controller.flush()).toBe(true)
+  expect(api.save).toHaveBeenCalledOnce()
+  expect(controller.snapshot().readingState?.doc.toString()).toBe('local # External')
+})
+
+test('conflicts in Read mode retain local content and keep close flush blocked', async () => {
+  views[0].dispatch({ changes: { from: 0, insert: 'local ' } })
+  const local = views[0].state
+  controller.setMode('read')
+  api.read.mockResolvedValue({ ...original, content: 'External conflict', revision: 'external' })
+  await controller.refresh()
+  expect(controller.snapshot().status).toBe('conflict')
+  expect(controller.snapshot().readingState).toBe(local)
+  expect(await controller.flush()).toBe(false)
+  expect(api.save).not.toHaveBeenCalled()
+  controller.setMode('write')
+  expect(views[0].state).toBe(local)
+})
