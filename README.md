@@ -46,9 +46,9 @@ with editing disabled. Typography, spacing, line wrapping and scroll position st
 unchanged. The live session preserves unsaved edits, selection and undo history.
 Mode switches do not save, read from disk, or change navigation history or recents.
 
-The title strip shows a dot for unsaved edits, a spinner while saving, and a warning
-for save failures, conflicts or unavailable files. Saved documents have no indicator.
-Recovery actions remain in the writing pane.
+The title strip shows “saved”, “saving...” or “not saved”. Save failures, conflicts
+and unavailable files show “not saved”, with details in the tooltip and accessible
+label. Recovery actions remain in the writing pane.
 
 Edits autosave after 650 ms of inactivity. Closing the window or changing folders
 flushes pending edits first. Clean documents reload external changes; conflicting

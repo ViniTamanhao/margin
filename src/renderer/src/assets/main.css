@@ -551,34 +551,6 @@ input:disabled,
   align-items: center;
   app-region: no-drag;
 }
-.document-status svg {
-  width: 14px;
-  height: 14px;
-}
-.save-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.save-spinner {
-  width: 11px;
-  height: 11px;
-  border: 1px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: save-spin 1s linear infinite;
-}
-@keyframes save-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .save-spinner {
-    animation: none;
-  }
-}
 .writing-pane {
   position: relative;
 }

@@ -4,7 +4,6 @@ export function Icon({
   name:
     | 'pen'
     | 'eye'
-    | 'warning'
     | 'minimize'
     | 'maximize'
     | 'restore'
@@ -21,7 +20,6 @@ export function Icon({
   const paths = {
     pen: 'm16 3 5 5-13 13H3v-5L16 3Zm-2 2 5 5',
     eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Zm13 0a3 3 0 1 0-6 0 3 3 0 0 0 6 0',
-    warning: 'M12 3 2 21h20L12 3Zm0 6v5m0 3v.1',
     minimize: 'M6 12h12',
     maximize: 'M6 6h12v12H6V6Z',
     restore: 'M9 6h9v9M6 9h9v9H6V9Z',

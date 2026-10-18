@@ -164,6 +164,10 @@ export async function runSearchPolish({
     'Read mode renders live Markdown'
   )
   assert.equal(await status(), 'Unsaved changes')
+  assert.equal(
+    await evaluate("document.querySelector('.document-status').textContent"),
+    'not saved'
+  )
   assert.equal(probe.saves, savesBeforeMode, 'switching mode does not flush')
   assert.equal(probe.reads.length, readsBeforeMode, 'switching mode does not reload')
   assert.equal(
@@ -200,23 +204,30 @@ export async function runSearchPolish({
   assert.equal(await evaluate("document.querySelector('.cm-content').isContentEditable"), true)
   assert.deepEqual(await session(), liveSession, 'Write restores document and selection')
   assert.equal(await evaluate("document.activeElement?.classList.contains('cm-content')"), true)
-  await until(async () => (await status()) === 'Saving…', 'autosave shows subtle spinner')
-  await until(async () => (await status()) === null, 'saved hides indicator')
+  await until(async () => (await status()) === 'Saving…', 'autosave shows saving text')
+  assert.equal(
+    await evaluate("document.querySelector('.document-status').textContent"),
+    'saving...'
+  )
+  await until(async () => (await status()) === 'Saved', 'saved shows saved text')
   assert.equal(await readFile(join(workspace, 'a.md'), 'utf8'), liveSession.doc)
   probe.saveDelay = 0
   await key('z', ['control'])
   await until(async () => (await session()).doc === source, 'undo history survives mode switching')
   await key('s', ['control'])
-  await until(async () => (await status()) === null, 'undo is saved')
+  await until(async () => (await status()) === 'Saved', 'undo is saved')
   probe.saveFailure = true
   await evaluate("window.marginEditAndRead('# Save failure\\n\\n')")
-  await until(async () => (await status()) === 'Could not save', 'save errors show warning')
-  assert.equal(await evaluate("!!document.querySelector('.document-status svg')"), true)
+  await until(async () => (await status()) === 'Could not save', 'save errors show not saved')
+  assert.equal(
+    await evaluate("document.querySelector('.document-status').textContent"),
+    'not saved'
+  )
   probe.saveFailure = false
   await toggleMode()
   await key('z', ['control'])
   await key('s', ['control'])
-  await until(async () => (await status()) === null, 'save recovers after error')
+  await until(async () => (await status()) === 'Saved', 'save recovers after error')
   await evaluate("document.querySelector('.mode-toggle').focus()")
   await key('Space')
   assert.equal(

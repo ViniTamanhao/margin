@@ -783,7 +783,10 @@ async function run() {
         await evaluate("document.querySelector('.document-status').getAttribute('aria-label')"),
         'Save conflict'
       )
-      assert.equal(await evaluate("!!document.querySelector('.document-status svg')"), true)
+      assert.equal(
+        await evaluate("document.querySelector('.document-status').textContent"),
+        'not saved'
+      )
       await screenshot('conflict.png')
       window.close()
       await sleep(400)
